@@ -4,8 +4,17 @@
 # Allow the .gitignore file itself
 !.gitignore
 
+# Allow documentation and licenses
+!README.md
+!LICENSE
+
 # Allow all Forth files
 !*.f
 
 # Allow directories so Git can find Forth files inside them
 !*/
+# OneDrive / Windows temp files
+Thumbs.db
+Desktop.ini
+~$*
+.DS_Store
