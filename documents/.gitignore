@@ -9,3 +9,8 @@
 
 # Allow directories so Git can find Forth files inside them
 !*/
+# OneDrive / Windows temp files
+Thumbs.db
+Desktop.ini
+~$*
+.DS_Store

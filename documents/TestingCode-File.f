@@ -1,3 +1,5 @@
+\ 25\05\2026 10:25;
+
 i2c import
 \ hex
 
@@ -48,13 +50,7 @@ $d9 constant  SET_PRECHARGE
 $db constant  SET_VCOM_DESEL 
 $8d constant  SET_CHARGE_PUMP
 
-: dcmd ( byte -- )
-     $00 cmd-buf c! \ control byte for commands
-     cmd-buf 1+ c!  \ command byte
-     cmd-buf 2 I2C0 >i2c-stop drop ;
-	
-: dcmds ( b b .. b n -- )  \ send n bytes
-     0 do dcmd loop ;
+
 
 : send-cmd  ( n..n' # -- )  \ send n bytes from stack
     \ check that # is less than cmd-buf-size 
@@ -151,15 +147,9 @@ $8d constant  SET_CHARGE_PUMP
      \ send 128 bytes of data for each of the 8 pages
 
      set-col-page
-     $40 myBuffer c!
-     myBuffer 1025 buffer-to-oled
+     $40 myBuffer c!  \ store $40 cmd byte in myBuffer[0]
+     myBuffer 1025 buffer-to-oled  \\ send myBuffer to oled
 ;
-\     myBuffer
-\     1024 0 do
-\         dup i + c@ ddata
-\     loop
-\     drop
-\ 
 
 : oled-clear ( -- )
      \ fill myBuffer with $00
@@ -167,7 +157,6 @@ $8d constant  SET_CHARGE_PUMP
      \ send the buffer to oled
 
 	$00 fill-myBuffer
-     \ show-myBuffer
      send-myBuffer-oled
 ;
 
