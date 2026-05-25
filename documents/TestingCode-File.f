@@ -99,18 +99,18 @@ $8d constant  SET_CHARGE_PUMP
 : buffer-to-oled ( addr n -- )  \ send n bytes from addr
      I2C0 >i2c-stop drop ;
 
-: set-col-page ( -- )
-     \ set column and page addresses to 0
-     \ send 128 bytes of data for each of the 8 pages
-     $00 $7f SET_COL_ADDR 3 send-cmd
-     $07 $00 SET_PAGE_ADDR 3 send-cmd
+: set-page ( end start -- )
+     \ setting page limits which part of the screen is updated
+     \ eg. $03 $03 SET_PAGE_ADDR 3 send-cmd would update only the 4th line.
+     SET_PAGE_ADDR 3 send-cmd
+     \ we can send one page, two or all seven
+     \ we don't need to send all 1024 bytes every time
 ;
 
 : oled-init ( -- copying from RNs micropython )
 	SET_DISP_OFF 1 send-cmd  \ set display off
      $10 SET_CHARGE_PUMP 2 send-cmd
 	$00 SET_MEM_ADDR 2 send-cmd  \  horizontal
-     set-col-page
 
 	\ resolution and layout
 	SET_DISP_START_LINE 1 send-cmd			\ set display start line
@@ -127,6 +127,8 @@ $8d constant  SET_CHARGE_PUMP
 
 	\ display
 	$7f SET_CONTRAST 2  send-cmd
+     $7f $00 SET_COL_ADDR 3 send-cmd
+     $07 $00 SET_PAGE_ADDR 3 send-cmd
 	SET_ENTIRE_ON  1 send-cmd
 	SET_NORM_INV 1  send-cmd
 
@@ -158,19 +160,16 @@ $8d constant  SET_CHARGE_PUMP
      drop 
 ;
 
-: send-myBuffer-oled   ( -- )
-     \ send myBuffer to oled
-     \ set column and page addresses to 0
+: send-myBuffer-oled   ( -- ) \ sends whole 1024 myBuffer
+     \ page addresses from  0 to 7
      \ send 128 bytes of data for each of the 8 pages
-
-     set-col-page
+     7 0 set-page
      $40 myBuffer c!  \ store $40 cmd byte in myBuffer[0]
      myBuffer 1025 buffer-to-oled  \ send myBuffer to oled
 ;
 
-: oled-clear ( -- )
+: oled-clear ( -- )  \ whole screen
      \ fill myBuffer with $00
-     \ show the buffer to screen
      \ send the buffer to oled
 
 	$00 fill-myBuffer

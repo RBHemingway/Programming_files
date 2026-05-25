@@ -1,3 +1,10 @@
+\ 25\05\2026 10:25;
+
+\ store stack addr into sp0
+variable sp0
+sp@ sp0 !   \ sp0 is required in send-cmd
+
+
 i2c import
 \ hex
 
@@ -11,7 +18,7 @@ $3C  constant ssd1306-addr
 
 create cmd-buf  cmd-buf-size allot      
 	\ control + 4 command
-create data-buf OLED-W 1 + allot 
+create data-buf OLED-W 1+ allot 
 	\ control + up to 128 data bytes
 create myBuffer 1025 allot \ control + 1 full screen buffer
 
@@ -48,13 +55,7 @@ $d9 constant  SET_PRECHARGE
 $db constant  SET_VCOM_DESEL 
 $8d constant  SET_CHARGE_PUMP
 
-: dcmd ( byte -- )
-     $00 cmd-buf c! \ control byte for commands
-     cmd-buf 1+ c!  \ command byte
-     cmd-buf 2 I2C0 >i2c-stop drop ;
-	
-: dcmds ( b b .. b n -- )  \ send n bytes
-     0 do dcmd loop ;
+
 
 : send-cmd  ( n..n' # -- )  \ send n bytes from stack
     \ check that # is less than cmd-buf-size 
@@ -71,33 +72,45 @@ $8d constant  SET_CHARGE_PUMP
         cmd-buf swap            \ adr #+1
         I2C0 >i2c-stop drop
     else
+        \ we need to restore the stack pointer to remove unused bytes
         sp0 @ sp!  
     then 
 ;
 
-: ddata ( byte -- )
-     $40 cmd-buf c! \ control byte for commands
-     cmd-buf 1+ c!  \ command byte
-     cmd-buf 2 I2C0 >i2c-stop drop ;
-	
-: ddatas ( b b .. b n -- )  \ send n bytes
-     0 do ddata loop ;
+: send-data ( d..d' # -- )  \  must be < 129 bytes
+    dup OLED-W 1+ <      \ n..n' # flag
+    if
+        dup >r                  \ n..n' #      r: #
+        $40                     \ n..n' # 0    r: #
+        swap 1+                 \ n..n' 0 #+1  r: #
+        0 do                    \ n..n' 0      r: #
+            data-buf i +         \ n..n' 0 adr+i    r: #
+            c!                  \ n..n'        r: #
+        loop
+        r> 1+                   \ #+1
+        data-buf swap            \ adr #+1
+        I2C0 >i2c-stop drop
+    else
+        \ we need to restore the stack pointer to remove unused bytes
+        sp0 @ sp!  
+    then 
+;
 
 : buffer-to-oled ( addr n -- )  \ send n bytes from addr
      I2C0 >i2c-stop drop ;
 
-: set-col-page ( -- )
-     \ set column and page addresses to 0
-     \ send 128 bytes of data for each of the 8 pages
-     $7f $00 SET_COL_ADDR 3 send-cmd
-     $07 $00 SET_PAGE_ADDR 3 send-cmd
+: set-page ( end start -- )
+     \ setting page limits which part of the screen is updated
+     \ eg. $03 $03 SET_PAGE_ADDR 3 send-cmd would update only the 4th line.
+     SET_PAGE_ADDR 3 send-cmd
+     \ we can send one page, two or all seven
+     \ we don't need to send all 1024 bytes every time
 ;
 
 : oled-init ( -- copying from RNs micropython )
 	SET_DISP_OFF 1 send-cmd  \ set display off
      $10 SET_CHARGE_PUMP 2 send-cmd
 	$00 SET_MEM_ADDR 2 send-cmd  \  horizontal
-     set-col-page
 
 	\ resolution and layout
 	SET_DISP_START_LINE 1 send-cmd			\ set display start line
@@ -114,6 +127,8 @@ $8d constant  SET_CHARGE_PUMP
 
 	\ display
 	$7f SET_CONTRAST 2  send-cmd
+     $7f $00 SET_COL_ADDR 3 send-cmd
+     $07 $00 SET_PAGE_ADDR 3 send-cmd
 	SET_ENTIRE_ON  1 send-cmd
 	SET_NORM_INV 1  send-cmd
 
@@ -145,29 +160,19 @@ $8d constant  SET_CHARGE_PUMP
      drop 
 ;
 
-: send-myBuffer-oled   ( -- )
-     \ send myBuffer to oled
-     \ set column and page addresses to 0
+: send-myBuffer-oled   ( -- ) \ sends whole 1024 myBuffer
+     \ page addresses from  0 to 7
      \ send 128 bytes of data for each of the 8 pages
-
-     set-col-page
-     $40 myBuffer c!
-     myBuffer 1025 buffer-to-oled
+     7 0 set-page
+     $40 myBuffer c!  \ store $40 cmd byte in myBuffer[0]
+     myBuffer 1025 buffer-to-oled  \ send myBuffer to oled
 ;
-\     myBuffer
-\     1024 0 do
-\         dup i + c@ ddata
-\     loop
-\     drop
-\ 
 
-: oled-clear ( -- )
+: oled-clear ( -- )  \ whole screen
      \ fill myBuffer with $00
-     \ show the buffer to screen
      \ send the buffer to oled
 
 	$00 fill-myBuffer
-     \ show-myBuffer
      send-myBuffer-oled
 ;
 
@@ -177,5 +182,3 @@ $8d constant  SET_CHARGE_PUMP
      -rot                \ addr' num byte
      fill
 ;
-
-
