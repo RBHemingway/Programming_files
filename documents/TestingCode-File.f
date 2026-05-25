@@ -1,4 +1,4 @@
-\ 25\05\2026 10:25;
+\ 25\05\2026 13:30;
 
 \ store stack addr into sp0
 variable sp0
@@ -114,9 +114,9 @@ $8d constant  SET_CHARGE_PUMP
 
 	\ resolution and layout
 	SET_DISP_START_LINE 1 send-cmd			\ set display start line
-	SET_SEG_REMAP 1 send-cmd				\ col addr 127 mapped to SEG0
+	SET_SEG_REMAP 1 or 1 send-cmd				\ col addr 127 mapped to SEG0
 	$3f SET_MUX_RATIO 2  send-cmd  
-	SET_COM_OUT_DIR 1 send-cmd
+	SET_COM_OUT_DIR $08 or 1 send-cmd
 	$00 SET_DISP_OFFSET 2 send-cmd
 	$12 SET_COM_PIN_CFG  2 send-cmd
 
