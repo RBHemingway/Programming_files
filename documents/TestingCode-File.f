@@ -148,7 +148,7 @@ $8d constant  SET_CHARGE_PUMP
 
      set-col-page
      $40 myBuffer c!  \ store $40 cmd byte in myBuffer[0]
-     myBuffer 1025 buffer-to-oled  \\ send myBuffer to oled
+     myBuffer 1025 buffer-to-oled  \ send myBuffer to oled
 ;
 
 : oled-clear ( -- )
@@ -166,5 +166,3 @@ $8d constant  SET_CHARGE_PUMP
      -rot                \ addr' num byte
      fill
 ;
-
-
