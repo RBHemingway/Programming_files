@@ -1,0 +1,11 @@
+# Ignore everything by default
+*
+
+# Allow the .gitignore file itself
+!.gitignore
+
+# Allow all Forth files
+!*.f
+
+# Allow directories so Git can find Forth files inside them
+!*/
