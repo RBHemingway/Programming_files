@@ -1,4 +1,6 @@
-\ 25\05\2026 19:00
+\ 26\05\2026 15:15
+\ 25May - got Screen LtR/TtB and setPixel etc working
+\ 26May - start on lines and rectangles
 
 \ store stack addr into sp0
 variable sp0
@@ -178,6 +180,11 @@ $8d constant  SET_CHARGE_PUMP
      send-frameBuffer-oled
 ;
 
+: oled-fill ( -- )
+	$ff fill-frameBuffer
+	sfbo
+;
+
 : partial-fill-frameBuffer  ( offset number byte -- )   
      rot                 \ num byte offset
      frameBuffer 1+ +       \ num byte addr'
@@ -214,7 +221,8 @@ $8d constant  SET_CHARGE_PUMP
 	r> 7 lshift +		\ mask index
 ;
 
-: setPixel ( x y -- )
+: setPixelOn ( x y -- )
+\ sets pixel in frameBuffer, not the GDDRAM
     \ check ranges of x and y
     check-XY-Ranges    \ x y flag 
     if  \ true means out of range  
@@ -231,57 +239,91 @@ $8d constant  SET_CHARGE_PUMP
 	swap c!					\ --
 ;
 
-: drawHLine ( x1 x2 y -- )
-    \ draw horizontal line from (x1,y) to (x2,y)
-    dup 3 rshift          \ x1 x2 y page
-    >r                    \ x1 x2   (page on return stack)
-    7 and                 \ x1 bit
-    1 swap lshift         \ x1 mask
+: setPixelOff ( x y -- )
+\ sets pixel in frameBuffer, not the GDDRAM
+    \ check ranges of x and y
+    check-XY-Ranges    \ x y flag 
+    if  \ true means out of range  
+        2drop exit
+    then           \ x y --  in range
+	get-Mask-BufferIndex	\ mask index
 
-    \ compute index = x1 + page*128
-    swap                  \ mask x2
-    r> 7 lshift +         \ mask index
-
-    \ OR mask into buffer[index] for each x from x1 to x2
-    begin
-        dup frameBuffer 1+ + c@ or dup frameBuffer 1+ + c!  \ update buffer[index]
-        dup 127 < while       \ continue until we reach the end of the line
-        1+                   \ move to next pixel
-    repeat
-    drop
+    \ OR mask into buffer[index]
+    \ remember frameBuffer[0] is $40 control byte
+    frameBuffer 1+ +      	\ mask addr'
+    dup c@ 					\ mask addr' byte			
+	rot 					\ addr' byte mask
+	xor						\ addr' byte' 
+	swap c!					\ --
 ;
 
-\ : drawRectangle ( x1 y1 x2 y2 -- )
-\      \ draw
-\     >r >r              \ x1 y1          (r) y2 x2 
-\     2dup               \ x1 y1 x1 y1    (r) y2 x2
-\     r@ swap            \ x1 y1 x1 x2 y1 (r) y2 x2   
-\     do                 \ loop y from y1 to y2
-\         over i setPixel
-\     loop
+: drawHLine ( x1 x2 y -- )
+\ sets pixel in frameBuffer, not the GDDRAM
+    \ draw horizontal line from (x1,y) to (x2,y)
+	-rot 1+			\ y x1 x2+1
+	2dup			\ y x1 x2 x1 x2
+	<				\ y x1 x2 flag
+	if				\ y x1 x2 
+		swap		\ y x2 x1 
+	then
+	do				\ y
+		dup			\ y y
+		i swap		\ y x' y
+		setPixelOn	\ y 
+	loop
+	drop
+;
 
-\     r> r>              \ restore x2 y2
-\     >r >r              \ stash again for second vertical line
-\     2dup               \ x1 y1 x1 y1
-\     r@ swap            \ x1 y1 x1 y2
-\     do                 \ loop y from y1 to y2
-\         r@ i setPixel
-\     loop
+: drawVLine  ( y1 y2 x -- )
+\ sets pixel in frameBuffer, not the GDDRAM
+    \ draw vertical line from (x,y1) to (x,y2)
+	-rot 1+			\ x y1 y2+1 
+	2dup 			\ x y1 y2 y1 y2 
+	< if 			\ x y1 y2 
+		swap		\ x y2 y1 
+	then
+	do				\ x 
+		dup			\ x x 
+		i 			\ x x y'
+		setPixelOn	\ x 
+	loop
+	drop
+;
 
-\     r> r>              \ restore x2 y2
-\     2dup               \ x1 y1 x2 y2
-\     swap do            \ draw top horizontal line
-\         over i setPixel
-\     loop
+: drawRectangle ( x1 y1 x2 y2 -- )
+\ sets pixel in frameBuffer, not the GDDRAM
+	\ have to draw 4 lines
+	\ H x1 x2 y1  and x1 x2 y2 
+	\ V y1 y2 x1  and y1 y2 x2 
+	{ x1 y1 x2 y2 }
+	x1 x2 y1 drawHLine
+	x1 x2 y2 drawHLine
+	y1 y2 x1 drawVLine
+	y1 y2 X2 drawVLine
+;
 
-\     swap do            \ draw bottom horizontal line
-\         over i setPixel
-\     loop
-
-\     2drop 2drop        \ clean up stack
-\ ;
-
-
+: drawOffsetRectangle  ( offset -- )
+\ sets pixel in frameBuffer, not the GDDRAM
+	\ define the four corner points
+	\ offset offset 127-offset 63-offset
+	\ then call drawRectangle 
+	
+	dup					\ offset offset
+	OLED-H 2/ 1-			\ offset offset 63
+	< if 				\ offset
+		dup 2dup		\ offset offset offset offset
+		oled-w 			\ offset offset offset offset 128
+		swap			\ offset offset offset 128 offset 
+		- 1-			\ offset offset offset 127-offset
+		swap			\ offset offset 127-offset offset
+		OLED-H			\ offset offset 127-offset offset 64
+		swap			\ offset offset 127-offset 64 offset
+		- 1-			\ offset offset 127-offset 63-offset
+		drawRectangle
+	else
+		drop
+	then
+;
 
 
 
@@ -296,3 +338,4 @@ i2c-init
 oled-init
 \ $40 frameBuffer c!  \ store $40 cmd byte in frameBuffer[0]
 \ frameBuffer 1025 buffer-to-oled  \ send frameBuffer to oled
+
