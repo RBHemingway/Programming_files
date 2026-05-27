@@ -1,4 +1,4 @@
-\ 26\05\2026 15:15
+\ 27\05\2026 14:30;
 \ 25May - got Screen LtR/TtB and setPixel etc working
 \ 26May - start on lines and rectangles
 
@@ -431,6 +431,7 @@ create font
   00 c, 41 c, 77 c, 08 c, 00 c, \ }
   10 c, 08 c, 18 c, 10 c, 08 c, \ ~
 decimal
+6 constant bytesToStartNextChar \ fonts are 5 bytes, and one for gap between letters
 
 \ write byte in display memory:
 : wram ( b --) 
@@ -477,8 +478,94 @@ decimal
     1+
   loop
   drop ;
+  
+ \ the next few words write chrs and strings to the framBuffer
+ \ overwriting whatever is there
+ \ each char is 5 bytes wide and 8 bits deep
+ \ 
 
+: @xy ( x y -- index )
+    \ compute buffer index for (x,y)
+    \ characters are 5 bytes wide
+    oled-w *    \  x y*128
+    swap        \ y*128 x
+    bytesToStartNextChar *         \ y*128 x*5
+    +           \ y*128 x*6 + = index of first byte of char in frameBuffer
+	1+ 			\ add 1 as first buffer cell is [1] as [0] is used for the cmd
+;
 
+: .@xy  ( x y c -- )
+	\ insert one char into framBuffer at character position x y (not bit position)
+	\ x is from 0 to 20 - chrs in a row. 20 x 6 = 120 
+	\ y is from 0 to 7  - 1st line starts at y=0, second at y=8
+	\ check x y values are Valid or make them so
+	>r				\ x y     	r: c 
+	0 max 7 min		\ x y'		r: c
+	swap			\ y' x 		r: c
+	0 max 20 min	\ y' x'		r: c
+	swap r>			\ x' y' c
+	\
+    a>bp        \ x y c-adr
+    -rot        \ c-adr x y
+    @xy         \ c-adr indexFB
+    swap        \ indexFB c-adr
+     5 0 do     \ indexFB c-adr
+        dup     \ indexFB c-adr c-adr
+        c@      \ indexFB c-adr byte
+        rot     \ c-adr byte indexFB
+        dup >r  \ c-adr byte indexFB   r: indexFB
+		frameBuffer +  \ c-adr byte fbadr  r: indexFB
+		c!		\ c-adr 				r: indexFB
+        1+ 		\ c-adr+1				r: indexFB
+		r>		\ c-adr+1 indexFB
+		1+		\ c-adr+1 indexFB+1
+		swap 	\ indexFB+1 c-adr+1
+    loop
+    2drop
+;
+
+: sendChrToFrameBuffer  ( index adr -- index+6 adr+1 )
+	\ get the char at adr and insert the 5 bytes into frameBuffer
+	\ and leave the updated index and adr on stack 
+	\ save a copy of index and adr 
+	2dup >r >r 			\ index2FB adr 		r: adr index 
+	c@ 					\ index2FB c 			r: adr index 
+	a>bp 				\ index2FB fontadr		r: adrInStr index2FB 
+	5 0 do     \ indexFB c-adr
+        dup     \ indexFB c-adr c-adr
+        c@      \ indexFB c-adr byte
+        rot     \ c-adr byte indexFB
+        dup >r  \ c-adr byte indexFB   r: indexFB
+		frameBuffer +  \ c-adr byte fbadr  r: indexFB
+		c!		\ c-adr 				r: indexFB
+        1+ 		\ c-adr+1				r: indexFB
+		r>		\ c-adr+1 indexFB
+		1+		\ c-adr+1 indexFB+1
+		swap 	\ indexFB+1 c-adr+1
+    loop
+	2drop 
+	r> 6 + 
+	r> 1+ 
+;
+
+: .Str@xy  ( x y adr n -- )
+	\ now to insert a string into frameBuffer
+	\ need a starting x y position (0,0 to 20,7)
+	\      this is used to calc the index into the frameBuffer
+	\ insert only to end of line (for this word)
+	\ adr n is the buffer and count to insert
+	\ n + x must be less than 20, or trim n  ***** to complete
+	2swap		\ adr n x y
+	@xy			\ adr n index2FB
+	-rot		\ index2FB adr n 
+	0 DO		\ index2FB adr  \ n 0 do ... loop
+		\ insert one chr at adr into index2FB
+		sendChrToFrameBuffer	\ index2FB+6 adr+1
+	loop 
+	2drop 
+;
+	
+	
 
 
 \ ================================ end of code ================================
