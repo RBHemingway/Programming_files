@@ -14,3 +14,15 @@
 	
 : ddatas ( b b .. b n -- )  \ send n bytes
      0 do ddata loop ;
+
+\ to print a number to oled we need to convert to ASCII
+\ <# #s #> needs a double on stack and returns  adr count
+: .num2Buffer  ( n -- adr cnt )
+    0           \ convert to double
+    <# #s #>
+;
+
+: .num2FrameBuffer ( x y n -- )
+    .num2Buffer     \ x y adr cnt
+    .Str@xy
+;

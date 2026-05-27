@@ -1,4 +1,4 @@
-\ 27\05\2026 14:30;
+\ 27\05\2026 19:15;
 \ 25May - got Screen LtR/TtB and setPixel etc working
 \ 26May - start on lines and rectangles
 
@@ -432,6 +432,8 @@ create font
   10 c, 08 c, 18 c, 10 c, 08 c, \ ~
 decimal
 6 constant bytesToStartNextChar \ fonts are 5 bytes, and one for gap between letters
+20 constant maxScreenChars
+7  constant maxScreenLines
 
 \ write byte in display memory:
 : wram ( b --) 
@@ -494,15 +496,29 @@ decimal
 	1+ 			\ add 1 as first buffer cell is [1] as [0] is used for the cmd
 ;
 
+: sendAByte ( indexFB c-adr -- indexFB+1 c-adr+1)
+    \ from c-adr to frameBuffer+indexFB
+    dup     \ indexFB c-adr c-adr
+    c@      \ indexFB c-adr byte
+    rot     \ c-adr byte indexFB
+    dup >r  \ c-adr byte indexFB   r: indexFB
+    frameBuffer +  \ c-adr byte fbadr  r: indexFB
+    c!		\ c-adr 				r: indexFB
+    1+ 		\ c-adr+1				r: indexFB
+    r>		\ c-adr+1 indexFB
+    1+		\ c-adr+1 indexFB+1
+    swap 	\ indexFB+1 c-adr+1
+;
+
 : .@xy  ( x y c -- )
 	\ insert one char into framBuffer at character position x y (not bit position)
 	\ x is from 0 to 20 - chrs in a row. 20 x 6 = 120 
 	\ y is from 0 to 7  - 1st line starts at y=0, second at y=8
 	\ check x y values are Valid or make them so
 	>r				\ x y     	r: c 
-	0 max 7 min		\ x y'		r: c
+	0 max maxScreenLines min		\ x y'		r: c
 	swap			\ y' x 		r: c
-	0 max 20 min	\ y' x'		r: c
+	0 max maxScreenChars min	\ y' x'		r: c
 	swap r>			\ x' y' c
 	\
     a>bp        \ x y c-adr
@@ -510,16 +526,7 @@ decimal
     @xy         \ c-adr indexFB
     swap        \ indexFB c-adr
      5 0 do     \ indexFB c-adr
-        dup     \ indexFB c-adr c-adr
-        c@      \ indexFB c-adr byte
-        rot     \ c-adr byte indexFB
-        dup >r  \ c-adr byte indexFB   r: indexFB
-		frameBuffer +  \ c-adr byte fbadr  r: indexFB
-		c!		\ c-adr 				r: indexFB
-        1+ 		\ c-adr+1				r: indexFB
-		r>		\ c-adr+1 indexFB
-		1+		\ c-adr+1 indexFB+1
-		swap 	\ indexFB+1 c-adr+1
+        sendAByte
     loop
     2drop
 ;
@@ -532,16 +539,7 @@ decimal
 	c@ 					\ index2FB c 			r: adr index 
 	a>bp 				\ index2FB fontadr		r: adrInStr index2FB 
 	5 0 do     \ indexFB c-adr
-        dup     \ indexFB c-adr c-adr
-        c@      \ indexFB c-adr byte
-        rot     \ c-adr byte indexFB
-        dup >r  \ c-adr byte indexFB   r: indexFB
-		frameBuffer +  \ c-adr byte fbadr  r: indexFB
-		c!		\ c-adr 				r: indexFB
-        1+ 		\ c-adr+1				r: indexFB
-		r>		\ c-adr+1 indexFB
-		1+		\ c-adr+1 indexFB+1
-		swap 	\ indexFB+1 c-adr+1
+        sendAByte   \ remember a character is 5 bytes
     loop
 	2drop 
 	r> 6 + 
@@ -554,7 +552,11 @@ decimal
 	\      this is used to calc the index into the frameBuffer
 	\ insert only to end of line (for this word)
 	\ adr n is the buffer and count to insert
-	\ n + x must be less than 20, or trim n  ***** to complete
+	\ n + x must be less than 20, or trim n 
+    3 pick      \ x y adr n x
+    maxScreenChars      \ x y adr n x maxSC
+    swap -              \ x y adr n maxSC-x
+    min                 \ x y adr n'   \ stop at end of line
 	2swap		\ adr n x y
 	@xy			\ adr n index2FB
 	-rot		\ index2FB adr n 
@@ -564,8 +566,15 @@ decimal
 	loop 
 	2drop 
 ;
-	
-	
+
+
+: .number2FrameBuffer  ( x y n -- )
+    s>d
+    swap over dabs
+    <# #s rot sign #>
+    .Str@xy
+;
+: n2fb .number2FrameBuffer ;
 
 
 \ ================================ end of code ================================
