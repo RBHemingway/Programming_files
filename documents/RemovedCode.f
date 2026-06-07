@@ -26,3 +26,5 @@
     .num2Buffer     \ x y adr cnt
     .Str@xy
 ;
+
+: timestwo 2 * . ;

@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit
 )
+from PyQt5.QtGui import QFont
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt
 from serial_manager import SerialManager
@@ -14,7 +15,8 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PyQt5 Forth Uploader for zeptoforth")
-        self.resize(1200, 800)
+        self.resize(1400, 900)
+        self.setStyleSheet("background-color: #A0A0A0;") # Medium grey background for the main window
         
         # Determine the base directory for profiles relative to the 'forth_uploader' package root
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -92,6 +94,14 @@ class MainWindow(QWidget):
 
         self.file_list = QListWidget()
         self.file_list.setSelectionMode(QListWidget.MultiSelection)
+        # Apply graduated fade color to the file_list QListWidget
+        # Using a subtle linear gradient from a light grey to an off-white
+        # Updated to a faded graded light green color
+        self.file_list.setStyleSheet("""
+            QListWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0FFE0, stop:1 #F0FFF0);
+                border: 1px solid #C0C0C0;
+            }""")
         left.addWidget(self.file_list)
 
         self.upload_sel_btn = QPushButton("Upload Selected")
@@ -109,6 +119,17 @@ class MainWindow(QWidget):
         # Use the custom interactive monitor
         self.monitor = ForthMonitorTextEdit()
         self.monitor.return_pressed.connect(self.on_monitor_return_pressed)
+        
+        # Set the font to Courier for the monitor
+        font = QFont("Arial")  # Courier")
+        self.monitor.setFont(font)
+        # Apply graduated fade color to the monitor QPlainTextEdit
+        # Using a subtle linear gradient from a light blue to an off-white blue
+        self.monitor.setStyleSheet("""
+            QPlainTextEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
+                border: 1px solid #C0C0C0;
+            }""")
         right.addWidget(self.monitor)
 
         self.clear_btn = QPushButton("Clear Monitor")

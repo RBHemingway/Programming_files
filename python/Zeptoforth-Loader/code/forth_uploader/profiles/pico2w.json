@@ -1,12 +1,23 @@
 {
-  "name": "Pico2W Dev",
-  "folder": ".",
-  "port": "COM7",
-  "baud": 115200,
-  "pacing": 10,
-  "groups": {
-    "core": ["core.fs", "math.fs"],
-    "drivers": ["gpio.fs", "spi.fs"],
-    "wifi": ["wifi.fs", "mqtt.fs"]
-  }
+    "folder": ".",
+    "port": "COM7",
+    "baud": 115200,
+    "data_bits": 8,
+    "parity": "None",
+    "stop_bits": 1.0,
+    "pacing": 10,
+    "groups": {
+        "core": [
+            "core.fs",
+            "math.fs"
+        ],
+        "drivers": [
+            "gpio.fs",
+            "spi.fs"
+        ],
+        "wifi": [
+            "wifi.fs",
+            "mqtt.fs"
+        ]
+    }
 }
