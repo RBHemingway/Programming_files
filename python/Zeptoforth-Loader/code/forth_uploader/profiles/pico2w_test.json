@@ -1,0 +1,23 @@
+{
+    "folder": ".",
+    "port": "COM7",
+    "baud": 115200,
+    "data_bits": 8,
+    "parity": "None",
+    "stop_bits": 1.0,
+    "pacing": 10,
+    "groups": {
+        "core": [
+            "core.fs",
+            "maths.fs"
+        ],
+        "drivers": [
+            "gpio.fs",
+            "spi.fs"
+        ],
+        "wifi": [
+            "wifi.fs",
+            "mqtt.fs"
+        ]
+    }
+}

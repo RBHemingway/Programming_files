@@ -3,7 +3,8 @@ import json
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
-    QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit
+    QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter,
+    QMessageBox
 )
 from PyQt5.QtGui import QFont
 from .forth_monitor_text_edit import ForthMonitorTextEdit
@@ -15,7 +16,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PyQt5 Forth Uploader for zeptoforth")
-        self.resize(1400, 900)
+        self.resize(1600, 1000)
         self.setStyleSheet("background-color: #A0A0A0;") # Medium grey background for the main window
         
         # Determine the base directory for profiles relative to the 'forth_uploader' package root
@@ -81,18 +82,19 @@ class MainWindow(QWidget):
         top.addWidget(self.pacing_slider)
 
         # --- Middle: file list + serial monitor ---
-        mid = QHBoxLayout()
-        layout.addLayout(mid)
-
+        # Using QSplitter for horizontal adjustability
+        mid_splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(mid_splitter)
+        
         # File list
-        left = QVBoxLayout()
-        mid.addLayout(left)
+        left = QVBoxLayout() # This is the QVBoxLayout for the left_widget
 
         self.choose_btn = QPushButton("Choose Folder")
         self.choose_btn.clicked.connect(self.on_choose_folder)
         left.addWidget(self.choose_btn)
 
         self.file_list = QListWidget()
+        self.file_list.itemClicked.connect(self.load_selected_file)
         self.file_list.setSelectionMode(QListWidget.MultiSelection)
         # Apply graduated fade color to the file_list QListWidget
         # Using a subtle linear gradient from a light grey to an off-white
@@ -110,12 +112,13 @@ class MainWindow(QWidget):
 
         self.upload_all_btn = QPushButton("Upload All")
         self.upload_all_btn.clicked.connect(self.on_upload_all)
-        left.addWidget(self.upload_all_btn)
-
+        left.addWidget(self.upload_all_btn) # Add to the left QVBoxLayout
+        
+        left_widget = QWidget()
+        left_widget.setLayout(left) # left_widget takes the `left` QVBoxLayout
         # Serial monitor
         right = QVBoxLayout()
-        mid.addLayout(right)
-
+        # Removed 'mid.
         # Use the custom interactive monitor
         self.monitor = ForthMonitorTextEdit()
         self.monitor.return_pressed.connect(self.on_monitor_return_pressed)
@@ -135,6 +138,44 @@ class MainWindow(QWidget):
         self.clear_btn = QPushButton("Clear Monitor")
         self.clear_btn.clicked.connect(lambda: self.monitor.clear())
         right.addWidget(self.clear_btn)
+        
+        right_widget = QWidget()
+        right_widget.setLayout(right)
+
+        # Text Editor Window
+        editor_layout = QVBoxLayout()
+        
+        self.editor_label = QLabel("File Editor:")
+        self.editor_label.setFont(QFont("Arial", 10, QFont.Bold))
+        editor_layout.addWidget(self.editor_label)
+        self.editor_fullpath = ""
+
+        self.editor_text_edit = QPlainTextEdit()
+        self.editor_text_edit.setFont(QFont("Consolas", 10))
+        self.editor_text_edit.setStyleSheet("""
+            QPlainTextEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E6F0FF, stop:1 #FFFFFF);
+                border: 1px solid #C0C0C0;
+                padding: 5px;
+            }""")
+        editor_layout.addWidget(self.editor_text_edit)
+
+        editor_buttons_layout = QHBoxLayout()
+        self.load_editor_btn = QPushButton("Load File...")
+        self.load_editor_btn.clicked.connect(self.on_load_editor_file)
+        editor_buttons_layout.addWidget(self.load_editor_btn)
+
+        self.saveas_editor_btn = QPushButton("Save File As...")
+        self.saveas_editor_btn.clicked.connect(self.on_saveas_editor_file)
+        editor_buttons_layout.addWidget(self.saveas_editor_btn)
+
+        self.save_editor_btn = QPushButton("Save File")
+        self.save_editor_btn.clicked.connect(self.on_save_editor_file)
+        editor_buttons_layout.addWidget(self.save_editor_btn)
+
+        editor_layout.addLayout(editor_buttons_layout)
+        editor_widget = QWidget()
+        editor_widget.setLayout(editor_layout)
 
         self.profile_combo = QComboBox()
         self.load_profiles()
@@ -144,13 +185,18 @@ class MainWindow(QWidget):
         top.addWidget(QLabel("Profile:"))
         top.addWidget(self.profile_combo)
 
-        self.load_profile_btn = QPushButton("Load")
-        self.load_profile_btn.clicked.connect(self.on_load_profile)
-        top.addWidget(self.load_profile_btn)
+        # self.load_profile_btn = QPushButton("Load")
+        # self.load_profile_btn.clicked.connect(self.on_load_profile)
+        # top.addWidget(self.load_profile_btn)
 
-        self.save_profile_btn = QPushButton("Save As…")
-        self.save_profile_btn.clicked.connect(self.on_save_profile)
-        top.addWidget(self.save_profile_btn)
+        # self.save_profile_btn = QPushButton("Save As…")
+        # self.save_profile_btn.clicked.connect(self.on_save_profile)
+        # top.addWidget(self.save_profile_btn)
+
+        # Add widgets to the splitter
+        mid_splitter.addWidget(left_widget)
+        mid_splitter.addWidget(right_widget)
+        mid_splitter.addWidget(editor_widget)
 
     def load_profiles(self):
         # Ensure the profile directory exists before trying to list its contents
@@ -177,14 +223,17 @@ class MainWindow(QWidget):
             self._apply_selected_profile_settings(self.selected_profile_name) # Apply settings on initial load
 
     def on_profile_selection_changed(self, text):
-        """Slot to update the internally stored selected profile name and preview its content."""
+        """Slot to update the internally stored selected profile name and preview its content.
+                This must use the text-editor window, not the monitor window
+        """
         self.selected_profile_name = text
-        print(f"DEBUG: Profile selection changed to: '{self.selected_profile_name}'")
+        # print(f"DEBUG: Profile selection changed to: '{self.selected_profile_name}'")
         # Immediately preview the profile content when selection changes
         if self.selected_profile_name != "No profiles found": # Only preview if a real profile exists
             # Apply the settings first, then preview the content
             self._apply_selected_profile_settings(self.selected_profile_name)
             self.preview_profile_content(self.selected_profile_name)
+            self.editor_fullpath = ""  # save btn mustn't save this from here
 
     def _apply_selected_profile_settings(self, profile_name):
         """
@@ -192,7 +241,7 @@ class MainWindow(QWidget):
         This is the core logic that updates port, baud, pacing, and folder.
         """
         profile_name = self.selected_profile_name # Use the stored selected name
-        print(f"DEBUG: Applying settings from profile: '{profile_name}'")
+        # print(f"DEBUG: Applying settings from profile: '{profile_name}'")
 
         # Prevent attempting to load the "No profiles found" placeholder
         if profile_name == "No profiles found" or not profile_name: # Also check if it's empty
@@ -298,14 +347,11 @@ class MainWindow(QWidget):
             self.monitor.appendPlainText(f"Error applying profile settings for '{profile_name}': {e}")
 
     def on_save_profile(self):
-        # Now that the core logic is in _apply_selected_profile_settings,
-        # this method just needs to call that helper.
-        self.monitor.appendPlainText(f"Applying settings from profile: {profile_name}")
+        return
 
     def preview_profile_content(self, profile_name):
         """
-        Reads a profile file and displays its JSON content in the monitor.
-        This method is now solely for display/preview purposes.
+        Reads a profile file and displays its JSON content in the text-editor window.
         """
         profile_path = os.path.join(self.profile_dir, profile_name)
         try:
@@ -318,15 +364,14 @@ class MainWindow(QWidget):
             return
         
         # Show the profile lines to monitor, pretty-printed
-        self.monitor.appendPlainText(f"--- Previewing Profile: {profile_name} ---")
+        self.editor_text_edit.clear()
+        # self.editor_text_edit.appendPlainText(f"--- Previewing Profile: {profile_name} ---")
         json_string = json.dumps(data, indent=4)
-        self.monitor.appendPlainText(json_string)
-        self.monitor.appendPlainText(f"--- End Preview of {profile_name} ---")
+        self.editor_text_edit.appendPlainText(json_string)
+        # self.editor_text_edit.appendPlainText(f"--- End Preview of {profile_name} ---")
 
     def on_load_profile(self):
         """Load button now just triggers the application of the currently selected profile."""
-        self._apply_selected_profile_settings(self.selected_profile_name)
-
         # Guide the user to the 'profiles' directory by default.
         # However, to ensure profiles are always saved IN this directory,
         # we'll extract just the filename from their input.
@@ -430,3 +475,62 @@ class MainWindow(QWidget):
         for f in self.files:
             path = os.path.join(self.current_folder, f)
             self.serial.upload_file(path)
+
+    def on_load_editor_file(self):
+        """Load a file into the text editor."""
+        path, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*)")
+        if path:
+            with open(path, "r", encoding="utf-8") as f:
+                text = f.read()
+            self.editor_text_edit.clear()
+            self.editor_text_edit.setPlainText(text)
+            # self.editor_label.setText(path)
+            self.setWindowTitle(path)
+            self.editor_fullpath = path
+
+    def load_selected_file(self, item):
+        fname = item.text()   # The file path stored in the list
+        # we need the full path
+        path = os.path.join(self.current_folder, fname)
+        try:
+            if path:
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                self.editor_text_edit.clear()
+                self.editor_text_edit.setPlainText(text)
+                # self.editor_label.setText(path)
+                self.setWindowTitle(path)
+                self.editor_fullpath = path
+        except Exception as e:
+            print("Error loading file:", e)
+
+
+    def on_saveas_editor_file(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save File", "", "AllFiles (*)")
+        try:
+            if path:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.editor_text_edit.toPlainText())
+                # if a json file re-load profiles
+                if os.path.splitext(path)[1].lower() == ".json":
+                    self.load_profiles
+        except Exception as e:
+            print("Error saving editor file as...", e)
+
+    def on_save_editor_file(self):
+        if not self.editor_text_edit.document().isModified():
+            QMessageBox.critical(self, "Not saving file", "Nothing has changed")
+            return
+        # save to same as loaded
+        if self.editor_fullpath == "":
+            QMessageBox.critical(self, "Error saving file", "This was loaded from profile combobox")
+        else:
+            path = self.editor_fullpath
+            try:
+                if path:
+                    with open(path, "w", encoding="utf-8") as f:
+                        f.write(self.editor_text_edit.toPlainText())
+            except Exception as e:
+                print("Error saving editor file", e)
+         
+            
