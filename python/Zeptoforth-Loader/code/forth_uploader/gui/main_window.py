@@ -129,7 +129,7 @@ class MainWindow(QWidget):
         self.monitor.return_pressed.connect(self.on_monitor_return_pressed)
         
         # Set the font to Courier for the monitor
-        font = QFont("Arial")  # Courier")
+        font = QFont("Consolas", 10)  # QFont("Arial")  # Courier")
         self.monitor.setFont(font)
         self.monitor.setStyleSheet("""
             QPlainTextEdit {
@@ -450,7 +450,50 @@ class MainWindow(QWidget):
 
     # --- Serial callbacks ---
     def on_serial_rx(self, text):
-        self.monitor.appendPlainText(text)
+        # Debugging: print all ordinal numbers in the received text
+    #     ord_numbers = [ord(char) for char in text]
+    #     print(f"\nOriginal ords: {ord_numbers}")
+
+    # #     # Define the common new ending for both scenarios
+    # #     # chr(13) = Carriage Return (\r)
+    # #     # chr(62) = Greater than (>)
+    # #     # chr(32) = Space
+    #     common_new_ending = chr(13) + chr(62) + chr(32) # Represents "\r> "
+
+    # #     # Define the sequence to look for anywhere in the text and truncate (new request)
+    # #     # chr(13) = Carriage Return (\r)
+    # #     # chr(10) = Line Feed (\n)
+    # #     # chr(27) = Escape (ESC)
+    # #     sequence_to_find_and_truncate = chr(13) + chr(10) + chr(27) # Represents "\r\n\x1b"
+
+    # #     # Define the sequence to replace if found at the end (previous request)
+    # #     # chr(13) = Carriage Return (\r)
+    # #     # chr(10) = Line Feed (\n)
+    # #     # chr(6)  = Acknowledge (ACK)
+    #     sequence_to_replace_at_end = chr(13) + chr(10) + chr(6) # Represents "\r\n\x06"
+
+    # #     modified_text = text
+
+    # #    # Prioritize checking for the truncation sequence
+    # #     truncate_index = modified_text.find(sequence_to_find_and_truncate)
+    # #     if truncate_index != -1:
+    # #         # If found, remove everything from that point and append the common new ending
+    # #         modified_text = modified_text[:truncate_index] + common_new_ending
+    # #         print(f"DEBUG: Truncated at \\r\\n\\x1b. Resulting ords: {[ord(char) for char in modified_text]}")
+    # #     # Otherwise, check for the "ends with" replacement
+    # #     elif modified_text.endswith(sequence_to_replace_at_end):
+    # #         modified_text = modified_text[:-len(sequence_to_replace_at_end)] + common_new_ending
+    # #         print(f"DEBUG: Replaced ending \\r\\n\\x06. Resulting ords: {[ord(char) for char in modified_text]}")
+
+    # #     self.monitor.appendPlainText(modified_text)
+
+    #     if modified_text.endswith(sequence_to_replace_at_end):
+    #         modified_text = modified_text[:-len(sequence_to_replace_at_end)] + common_new_ending
+    #         print(f"DEBUG: Replaced ending \\r\\n\\x06. Resulting ords: {[ord(char) for char in modified_text]}")
+
+    #     self.monitor.appendPlainText(modified_text)
+    
+        self.monitor.appendPlainText(text)  
 
     # --- UI actions ---
     def refresh_ports(self):
@@ -511,7 +554,8 @@ class MainWindow(QWidget):
     
     def on_monitor_return_pressed(self, line_to_send):
         """Slot to handle the Return key press in the monitor and send the line."""
-        self.serial.send_line(line_to_send)
+        if (len(line_to_send) > 1):
+            self.serial.send_line(line_to_send)
 
     def on_upload_all(self):
         for f in self.files:
