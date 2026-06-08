@@ -3,12 +3,12 @@ import json
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
-    QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter,
+    QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
     QMessageBox
 )
 from PyQt5.QtGui import QFont
 from .forth_monitor_text_edit import ForthMonitorTextEdit
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QEvent
 from serial_manager import SerialManager
 import serial.tools.list_ports
 
@@ -83,11 +83,16 @@ class MainWindow(QWidget):
 
         # --- Middle: file list + serial monitor ---
         # Using QSplitter for horizontal adjustability
-        mid_splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(mid_splitter)
+        mid_splitter = QSplitter(Qt.Horizontal) # Create the main horizontal splitter        
+        left = QVBoxLayout() 
         
-        # File list
-        left = QVBoxLayout() # This is the QVBoxLayout for the left_widget
+        # The existing choose folder button, file list, and upload buttons
+        # will go into this 'left' QVBoxLayout.
+
+        # and a button to load a reference file into reference tab
+        self.reference_btn = QPushButton("Choose Reference File")
+        self.reference_btn.clicked.connect(self.open_Reference_File)
+        left.addWidget(self.reference_btn)
 
         self.choose_btn = QPushButton("Choose Folder")
         self.choose_btn.clicked.connect(self.on_choose_folder)
@@ -114,37 +119,73 @@ class MainWindow(QWidget):
         self.upload_all_btn.clicked.connect(self.on_upload_all)
         left.addWidget(self.upload_all_btn) # Add to the left QVBoxLayout
         
-        left_widget = QWidget()
-        left_widget.setLayout(left) # left_widget takes the `left` QVBoxLayout
-        # Serial monitor
-        right = QVBoxLayout()
-        # Removed 'mid.
-        # Use the custom interactive monitor
+        left_widget = QWidget() # This widget holds the left QVBoxLayout
+        left_widget.setLayout(left) 
+
+        # 2. Middle Section: Tabbed Widget for Monitor and Scratchpad
+        self.tab_widget = QTabWidget()
+        
         self.monitor = ForthMonitorTextEdit()
         self.monitor.return_pressed.connect(self.on_monitor_return_pressed)
         
         # Set the font to Courier for the monitor
         font = QFont("Arial")  # Courier")
         self.monitor.setFont(font)
-        # Apply graduated fade color to the monitor QPlainTextEdit
-        # Using a subtle linear gradient from a light blue to an off-white blue
         self.monitor.setStyleSheet("""
             QPlainTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
                 border: 1px solid #C0C0C0;
             }""")
-        right.addWidget(self.monitor)
+        
+        # a. Monitor Tab content (existing monitor)
+        monitor_tab_layout = QVBoxLayout() 
+        monitor_tab_layout.addWidget(self.monitor)
 
         self.clear_btn = QPushButton("Clear Monitor")
         self.clear_btn.clicked.connect(lambda: self.monitor.clear())
-        right.addWidget(self.clear_btn)
-        
-        right_widget = QWidget()
-        right_widget.setLayout(right)
+        monitor_tab_layout.addWidget(self.clear_btn)
 
-        # Text Editor Window
-        editor_layout = QVBoxLayout()
+        monitor_tab_widget = QWidget() # Container for the monitor tab
+        monitor_tab_widget.setLayout(monitor_tab_layout)
+        self.tab_widget.addTab(monitor_tab_widget, "Monitor")
         
+        # b. Scratchpad Tab (new plain text widget)
+        self.scratchpad_text_edit = QPlainTextEdit()
+        self.scratchpad_text_edit.setFont(QFont("Consolas", 10))
+        self.scratchpad_text_edit.setStyleSheet("""
+            QPlainTextEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F0FFF0, stop:1 #E0dF80);
+                border: 1px solid #C0C0C0;
+                padding: 5px;
+            }""")
+        
+        scratchpad_tab_layout = QVBoxLayout()
+        scratchpad_tab_layout.addWidget(self.scratchpad_text_edit)
+
+        scratchpad_tab_widget = QWidget()
+        scratchpad_tab_widget.setLayout(scratchpad_tab_layout)
+        self.tab_widget.addTab(scratchpad_tab_widget, "Editor Copy")
+
+        # c. Add a second qplaintext to tab control
+        self.reference_text_edit = QPlainTextEdit()
+        self.reference_text_edit.setFont(QFont("Consolas", 10))
+        self.reference_text_edit.setStyleSheet("""
+            QPlainTextEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F0FFF0, stop:1 #b0FF80);
+                border: 1px solid #000000;
+                padding: 5px;
+            }""")
+        
+        reference_tab_layout = QVBoxLayout()
+        reference_tab_layout.addWidget(self.reference_text_edit)
+
+        reference_tab_widget = QWidget()
+        reference_tab_widget.setLayout(reference_tab_layout)
+        self.tab_widget.addTab(reference_tab_widget, "Reference")  
+
+        # 3. Right Section: Existing Editor Window
+        editor_layout = QVBoxLayout() # Define the editor_layout here
+
         self.editor_label = QLabel("File Editor:")
         self.editor_label.setFont(QFont("Arial", 10, QFont.Bold))
         editor_layout.addWidget(self.editor_label)
@@ -194,8 +235,9 @@ class MainWindow(QWidget):
         # top.addWidget(self.save_profile_btn)
 
         # Add widgets to the splitter
+        layout.addWidget(mid_splitter) # Add the splitter to the main layout
         mid_splitter.addWidget(left_widget)
-        mid_splitter.addWidget(right_widget)
+        mid_splitter.addWidget(self.tab_widget) # Add the new tabbed widget as the middle section
         mid_splitter.addWidget(editor_widget)
 
     def load_profiles(self):
@@ -484,7 +526,10 @@ class MainWindow(QWidget):
                 text = f.read()
             self.editor_text_edit.clear()
             self.editor_text_edit.setPlainText(text)
-            # self.editor_label.setText(path)
+            # and into scratchpad
+            self.scratchpad_text_edit.clear()
+            self.scratchpad_text_edit.setPlainText(text)
+            
             self.setWindowTitle(path)
             self.editor_fullpath = path
 
@@ -498,6 +543,10 @@ class MainWindow(QWidget):
                     text = f.read()
                 self.editor_text_edit.clear()
                 self.editor_text_edit.setPlainText(text)
+                # and also into scratchpad
+                self.scratchpad_text_edit.clear()
+                self.scratchpad_text_edit.setPlainText(text)
+                
                 # self.editor_label.setText(path)
                 self.setWindowTitle(path)
                 self.editor_fullpath = path
@@ -530,7 +579,28 @@ class MainWindow(QWidget):
                 if path:
                     with open(path, "w", encoding="utf-8") as f:
                         f.write(self.editor_text_edit.toPlainText())
+                    # now copy the saved text into scratchpad
+                    text = self.editor_text_edit.toPlainText()
+                    self.scratchpad_text_edit.setPlainText(text)
+
             except Exception as e:
                 print("Error saving editor file", e)
          
-            
+    def open_Reference_File(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Reference File",
+            "",
+            "All Files (*)"
+        )
+
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                self.reference_text_edit.setPlainText(f.read())
+        except Exception as e:
+            print("Error loading reference file:", e)
+
+
+
