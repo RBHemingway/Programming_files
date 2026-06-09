@@ -193,6 +193,7 @@ class MainWindow(QWidget):
         self.editor_fullpath = ""
 
         self.editor_text_edit = QPlainTextEdit()
+        self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
         self.editor_text_edit.setStyleSheet("""
             QPlainTextEdit {
@@ -240,6 +241,7 @@ class MainWindow(QWidget):
         mid_splitter.addWidget(left_widget)
         mid_splitter.addWidget(self.tab_widget) # Add the new tabbed widget as the middle section
         mid_splitter.addWidget(editor_widget)
+
 
     def load_profiles(self):
         # Ensure the profile directory exists before trying to list its contents
@@ -480,7 +482,7 @@ class MainWindow(QWidget):
             if port in detected:
                 self.port_combo.addItem(port)
             else:
-                self.port_combo.addItem(f"{port}  (not present)")
+                self.port_combo.addItem(f"{port}")  #  (not present)")
 
 
     def on_connect(self):
@@ -531,22 +533,36 @@ class MainWindow(QWidget):
         self.file_list.addItems(self.files)
 
     def on_upload_selected(self):
+        self.setCursor(Qt.WaitCursor)
+        self.upload_all_btn.setEnabled(False)
+        self.upload_sel_btn.setEnabled(False)
         for item in self.file_list.selectedItems():
             path = os.path.join(self.current_folder, item.text())
             self.serial.upload_file(path)
+
+        self.setCursor(Qt.ArrowCursor)
+        self.upload_all_btn.setEnabled(True)
+        self.upload_sel_btn.setEnabled(True)
     
     def on_monitor_return_pressed(self, line_to_send):
         ord_numbers = [ord(char) for char in line_to_send]
         print(f"\nOriginal ords: {ord_numbers}")
 
         """Slot to handle the Return key press in the monitor and send the line."""
-        print(f"Sending {line_to_send[self.ignoreChars:]}") # Debug print to verify the line being sent
-        self.serial.send_line(line_to_send[self.ignoreChars:])
+        print(f"Sending {line_to_send}") # Debug print to verify the line being sent
+        self.serial.send_line(line_to_send)
 
     def on_upload_all(self):
+        self.setCursor(Qt.WaitCursor)
+        self.upload_all_btn.setEnabled(False)
+        self.upload_sel_btn.setEnabled(False)
         for f in self.files:
             path = os.path.join(self.current_folder, f)
             self.serial.upload_file(path)
+        
+        self.setCursor(Qt.ArrowCursor)
+        self.upload_all_btn.setEnabled(True)
+        self.upload_sel_btn.setEnabled(True)
 
     def on_load_editor_file(self):
         """Load a file into the text editor."""
@@ -632,5 +648,27 @@ class MainWindow(QWidget):
         except Exception as e:
             print("Error loading reference file:", e)
 
+    def on_editor_modified_changed(self, modified):
+        if modified:
+            # Light yellow background when modified
+            self.editor_text_edit.setStyleSheet("""
+            QPlainTextEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7F70F6, stop:1 #FFFFFF);
+                border: 1px solid #000000;
+                padding: 5px;
+            }""")
+            self.save_editor_btn.setStyleSheet("background-color: yellow; color: black;")
 
+            # self.editor_text_edit.setStyleSheet("QPlainTextEdit { background-color: #fff8c4; }")
+        else:
+            # Normal background when clean
+            self.editor_text_edit.setStyleSheet("""
+            QPlainTextEdit {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E6F0FF, stop:1 #FFFFFF);
+                border: 1px solid #C0C0C0;
+                padding: 5px;
+            }""")
+            self.save_editor_btn.setStyleSheet("background-color: #a15a59; color: white;")
+
+            # self.editor_text_edit.setStyleSheet("QPlainTextEdit { background-color: white; }")
 
