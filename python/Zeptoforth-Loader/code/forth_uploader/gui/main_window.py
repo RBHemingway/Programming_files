@@ -1,3 +1,4 @@
+
 import os
 import json
 
@@ -16,7 +17,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PyQt5 Forth Uploader for zeptoforth")
-        self.resize(1600, 1000)
+        self.resize(1600, 600)
         self.setStyleSheet("background-color: #A0A0A0;") # Medium grey background for the main window
         
         # Determine the base directory for profiles relative to the 'forth_uploader' package root
@@ -294,10 +295,10 @@ class MainWindow(QWidget):
         if self.serial.ser and self.serial.ser.is_open:
             self.serial.close()
             self.connect_btn.setText("Connect")
+            self.monitor.clear()
             self.monitor.appendPlainText("Disconnected due to profile load.")
-        self.monitor.clear()
+            
         # --- END NEW SECTION ---
-
         profile_path = os.path.join(self.profile_dir, profile_name)
     
         # Apply settings with validation
@@ -358,6 +359,10 @@ class MainWindow(QWidget):
             elif self.stop_bits_combo.findText(profile_stop_bits) == -1:
                 # Add if not present, though for common values it should be
                 self.stop_bits_combo.addItem(profile_stop_bits)
+
+            # --- Get the number of chars to ignore in the serial output line
+            # usually an ord(6) spades
+            self.ignoreChars = int(data.get("ignore_chars", 0)) # Default to 0 if not specified
 
             # Ensure it's set as string for setCurrentText
             try:
@@ -424,8 +429,8 @@ class MainWindow(QWidget):
         if not ok or not full_user_selected_path:
             return
 
-                
-        # Extract only the base filename to ensure it's saved within our 'profiles' directory
+        # Extract only the base filename to ensure it's saved within our 
+        # profiles directory
         filename = os.path.basename(full_user_selected_path)
         actual_save_path = os.path.join(self.profile_dir, filename)
 
@@ -451,55 +456,32 @@ class MainWindow(QWidget):
     # --- Serial callbacks ---
     def on_serial_rx(self, text):
         # Debugging: print all ordinal numbers in the received text
-    #     ord_numbers = [ord(char) for char in text]
-    #     print(f"\nOriginal ords: {ord_numbers}")
-
-    # #     # Define the common new ending for both scenarios
-    # #     # chr(13) = Carriage Return (\r)
-    # #     # chr(62) = Greater than (>)
-    # #     # chr(32) = Space
-    #     common_new_ending = chr(13) + chr(62) + chr(32) # Represents "\r> "
-
-    # #     # Define the sequence to look for anywhere in the text and truncate (new request)
-    # #     # chr(13) = Carriage Return (\r)
-    # #     # chr(10) = Line Feed (\n)
-    # #     # chr(27) = Escape (ESC)
-    # #     sequence_to_find_and_truncate = chr(13) + chr(10) + chr(27) # Represents "\r\n\x1b"
-
-    # #     # Define the sequence to replace if found at the end (previous request)
-    # #     # chr(13) = Carriage Return (\r)
-    # #     # chr(10) = Line Feed (\n)
-    # #     # chr(6)  = Acknowledge (ACK)
-    #     sequence_to_replace_at_end = chr(13) + chr(10) + chr(6) # Represents "\r\n\x06"
-
-    # #     modified_text = text
-
-    # #    # Prioritize checking for the truncation sequence
-    # #     truncate_index = modified_text.find(sequence_to_find_and_truncate)
-    # #     if truncate_index != -1:
-    # #         # If found, remove everything from that point and append the common new ending
-    # #         modified_text = modified_text[:truncate_index] + common_new_ending
-    # #         print(f"DEBUG: Truncated at \\r\\n\\x1b. Resulting ords: {[ord(char) for char in modified_text]}")
-    # #     # Otherwise, check for the "ends with" replacement
-    # #     elif modified_text.endswith(sequence_to_replace_at_end):
-    # #         modified_text = modified_text[:-len(sequence_to_replace_at_end)] + common_new_ending
-    # #         print(f"DEBUG: Replaced ending \\r\\n\\x06. Resulting ords: {[ord(char) for char in modified_text]}")
-
-    # #     self.monitor.appendPlainText(modified_text)
-
-    #     if modified_text.endswith(sequence_to_replace_at_end):
-    #         modified_text = modified_text[:-len(sequence_to_replace_at_end)] + common_new_ending
-    #         print(f"DEBUG: Replaced ending \\r\\n\\x06. Resulting ords: {[ord(char) for char in modified_text]}")
-
-    #     self.monitor.appendPlainText(modified_text)
+        ord_numbers = [ord(char) for char in text]
+        print(f"\nReceived ords: {ord_numbers}")
     
         self.monitor.appendPlainText(text)  
 
     # --- UI actions ---
     def refresh_ports(self):
-        ports = [p.device for p in serial.tools.list_ports.comports()]
+        # ports = [p.device for p in serial.tools.list_ports.comports()]
+        # self.port_combo.clear()
+        # self.port_combo.addItems(ports)
+
+        # Full list COM1–COM25
+        all_ports = [f"COM{i}" for i in range(1, 26)]
+
+        # Detect actual connected ports
+        detected = {p.device for p in serial.tools.list_ports.comports()}
+
         self.port_combo.clear()
-        self.port_combo.addItems(ports)
+
+        # Add all ports, marking detected ones
+        for port in all_ports:
+            if port in detected:
+                self.port_combo.addItem(port)
+            else:
+                self.port_combo.addItem(f"{port}  (not present)")
+
 
     def on_connect(self):
         if self.connect_btn.text() == "Connect":
@@ -529,6 +511,7 @@ class MainWindow(QWidget):
                 self.connect_btn.setText("Connect")
         else:
             self.serial.close()
+            self.monitor.clear()
             self.monitor.appendPlainText("Disconnected.")
             self.connect_btn.setText("Connect")
 
@@ -543,7 +526,7 @@ class MainWindow(QWidget):
             self.load_files()
 
     def load_files(self):
-        self.files = [f for f in os.listdir(self.current_folder) if f.lower().endswith(".fs")]
+        self.files = [f for f in os.listdir(self.current_folder) if f.lower().endswith((".fs", ".f"))]
         self.file_list.clear()
         self.file_list.addItems(self.files)
 
@@ -553,9 +536,12 @@ class MainWindow(QWidget):
             self.serial.upload_file(path)
     
     def on_monitor_return_pressed(self, line_to_send):
+        ord_numbers = [ord(char) for char in line_to_send]
+        print(f"\nOriginal ords: {ord_numbers}")
+
         """Slot to handle the Return key press in the monitor and send the line."""
-        if (len(line_to_send) > 1):
-            self.serial.send_line(line_to_send)
+        print(f"Sending {line_to_send[self.ignoreChars:]}") # Debug print to verify the line being sent
+        self.serial.send_line(line_to_send[self.ignoreChars:])
 
     def on_upload_all(self):
         for f in self.files:

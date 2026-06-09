@@ -1,6 +1,6 @@
 {
-    "folder": ".",
-    "port": "COM7",
+    "folder": "C:\\Users\\rober\\OneDrive\\AA-Roberts-Hobbies\\Languages\\Forth\\Zeptoforth-Projects\\I2C-OLED\\UploadFolder",
+    "port": "COM15",
     "baud": 115200,
     "data_bits": 8,
     "parity": "None",

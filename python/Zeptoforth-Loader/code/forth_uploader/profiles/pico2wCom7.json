@@ -1,5 +1,5 @@
 {
-    "folder": ".",
+    "folder": "C:\\Users\\rober\\OneDrive\\AA-Roberts-Hobbies\\Languages\\Forth\\Zeptoforth-Projects\\I2C-OLED\\UploadFolder",
     "port": "COM7",
     "baud": 115200,
     "data_bits": 8,
@@ -9,7 +9,7 @@
     "groups": {
         "core": [
             "core.fs",
-            "math.fs"
+            "maths.fs"
         ],
         "drivers": [
             "gpio.fs",
