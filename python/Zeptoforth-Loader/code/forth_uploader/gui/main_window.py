@@ -15,6 +15,7 @@ import serial.tools.list_ports
 class FileListWidget(QListWidget):
     """Custom ListWidget that supports dragging files from Windows Explorer."""
     files_dropped = pyqtSignal(list)
+    open_in_reference = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,14 +47,20 @@ class FileListWidget(QListWidget):
 
     def show_context_menu(self, pos):
         """Displays a right-click menu to remove items or clear the list."""
+        item = self.itemAt(pos)
         menu = QMenu(self)
+        open_ref_action = None
+        if item:
+            open_ref_action = menu.addAction("Open in Reference")
         remove_action = menu.addAction("Remove Selected")
         clear_action = menu.addAction("Clear All")
         
         # Execute menu at global cursor position
         action = menu.exec_(self.viewport().mapToGlobal(pos))
         
-        if action == remove_action:
+        if action == open_ref_action and item:
+            self.open_in_reference.emit(item.data(Qt.UserRole))
+        elif action == remove_action:
             for item in self.selectedItems():
                 self.takeItem(self.row(item))
         elif action == clear_action:
@@ -199,8 +206,9 @@ class MainWindow(QWidget):
 
         self.file_list = FileListWidget()
         self.file_list.files_dropped.connect(self.add_dropped_files)
+        self.file_list.open_in_reference.connect(self.load_into_reference)
         self.file_list.itemClicked.connect(self.load_selected_file)
-        self.file_list.setSelectionMode(QListWidget.MultiSelection)
+        self.file_list.setSelectionMode(QListWidget.SingleSelection)
         self.file_list.setStyleSheet("""
             QListWidget {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0FFE0, stop:1 #F0FFF0);
@@ -271,6 +279,21 @@ class MainWindow(QWidget):
         reference_tab_widget = QWidget()
         reference_tab_widget.setLayout(reference_tab_layout)
         self.tab_widget.addTab(reference_tab_widget, "Reference")
+
+        # d. Words Tab (Copy of the words list for the middle section)
+        words_tab_layout_2 = QVBoxLayout()
+        self.definitions_list_2 = QListWidget()
+        self.definitions_list_2.setFont(QFont("Consolas", 10))
+        self.definitions_list_2.setStyleSheet("""
+            QListWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFF0E0, stop:1 #FFF8F0);
+                border: 1px solid #C0C0C0;
+            }""")
+        self.definitions_list_2.itemClicked.connect(self.on_definition_clicked)
+        words_tab_layout_2.addWidget(self.definitions_list_2)
+        words_tab_widget_2 = QWidget()
+        words_tab_widget_2.setLayout(words_tab_layout_2)
+        self.tab_widget.addTab(words_tab_widget_2, "Words")
 
         # 3. Right Section: Existing Editor Window
         editor_layout = QVBoxLayout()  # Define the editor_layout here
@@ -630,7 +653,6 @@ class MainWindow(QWidget):
                 self.add_file_path(path)
 
     def load_files(self):
-        self.file_list.clear()
         if os.path.isdir(self.current_folder):
             for f in os.listdir(self.current_folder):
                 if f.lower().endswith((".fs", ".f", ".txt")):
@@ -804,6 +826,7 @@ class MainWindow(QWidget):
     def update_definitions_list(self):
         """Update the list of Forth definitions (lines starting with ':') from the editor."""
         self.definitions_list.clear()
+        self.definitions_list_2.clear()
         text = self.editor_text_edit.toPlainText()
         for i, line in enumerate(text.splitlines(), 1):
             stripped = line.strip()
@@ -811,6 +834,7 @@ class MainWindow(QWidget):
                 # Format with 3-character wide line number prefix
                 display_text = f"{i:3} {stripped}"
                 self.definitions_list.addItem(display_text)
+                self.definitions_list_2.addItem(display_text)
 
     def on_definition_clicked(self, item):
         """Jump to the corresponding line in the editor when a word is clicked."""
@@ -824,3 +848,14 @@ class MainWindow(QWidget):
             self.editor_text_edit.setFocus()
         except Exception:
             pass
+
+    def load_into_reference(self, path):
+        """Loads a file into the reference text edit and switches to its tab."""
+        try:
+            if path and os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                self.reference_text_edit.setPlainText(text)
+                self.tab_widget.setCurrentIndex(1)  # Switch to Reference tab (index 1)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not load reference: {e}")
