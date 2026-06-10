@@ -3,10 +3,10 @@ import json
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
-    QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
+    QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QTextEdit, QSplitter, QTabWidget,
     QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut
 )
-from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence
+from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl
 from serial_manager import SerialManager
@@ -393,6 +393,10 @@ class MainWindow(QWidget):
         self.comment_shortcut = QShortcut(QKeySequence("Ctrl+/"), self.editor_text_edit)
         self.comment_shortcut.setContext(Qt.WidgetShortcut)
         self.comment_shortcut.activated.connect(self.on_toggle_comment)
+
+        self.find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self.editor_text_edit)
+        self.find_shortcut.setContext(Qt.WidgetShortcut)
+        self.find_shortcut.activated.connect(self.on_toggle_find_highlight)
 
         editor_buttons_layout = QHBoxLayout()
         self.load_editor_btn = QPushButton("Load File...")
@@ -1023,13 +1027,16 @@ class MainWindow(QWidget):
             # self.editor_text_edit.setStyleSheet("QPlainTextEdit { background-color: white; }")
 
     def update_definitions_list(self):
-        """Update the list of Forth definitions (lines starting with ':') from the editor."""
+        """Update the list of Forth definitions, variables, and constants from the editor."""
         self.definitions_list.clear()
         self.definitions_list_2.clear()
         text = self.editor_text_edit.toPlainText()
         for i, line in enumerate(text.splitlines(), 1):
             stripped = line.strip()
-            if stripped.startswith(":"):
+            # Check for ':' at the start or 'variable'/'constant' as standalone words
+            lower_stripped = stripped.lower()
+            words = lower_stripped.split()
+            if stripped.startswith(":") or "variable" in words or "constant" in words:
                 # Format with 3-character wide line number prefix
                 display_text = f"{i:3} {stripped}"
                 self.definitions_list.addItem(display_text)
@@ -1086,6 +1093,36 @@ class MainWindow(QWidget):
             current_block = current_block.next()
             
         cursor.endEditBlock()
+
+    def on_toggle_find_highlight(self):
+        """Highlight all occurrences of selected text or clear if already highlighted."""
+        # If there are already extra selections (highlights), clear them and return
+        if self.editor_text_edit.extraSelections():
+            self.editor_text_edit.setExtraSelections([])
+            self.monitor.appendPlainText("Find highlights cleared.")
+            return
+
+        cursor = self.editor_text_edit.textCursor()
+        search_text = cursor.selectedText()
+        if not search_text:
+            return
+
+        extra_selections = []
+        fmt = QTextCharFormat()
+        fmt.setBackground(QColor("yellow"))
+        fmt.setForeground(QColor("black"))
+
+        doc = self.editor_text_edit.document()
+        find_cursor = doc.find(search_text)
+        while not find_cursor.isNull():
+            selection = QTextEdit.ExtraSelection()
+            selection.format = fmt
+            selection.cursor = find_cursor
+            extra_selections.append(selection)
+            find_cursor = doc.find(search_text, find_cursor)
+
+        self.editor_text_edit.setExtraSelections(extra_selections)
+        self.monitor.appendPlainText(f"Highlighted {len(extra_selections)} occurrences of '{search_text}'.")
 
     def load_into_reference(self, path):
         """Loads a file into the reference text edit and switches to its tab."""
