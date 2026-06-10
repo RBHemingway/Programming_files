@@ -1,0 +1,12 @@
+{
+  "name": "Default Dev",
+  "folder": ".",
+  "port": "COM0",
+  "baud": 115200,
+  "pacing": 10,
+  "groups": {
+    "core": ["core.fs", "math.fs"],
+    "drivers": ["gpio.fs", "spi.fs"],
+    "wifi": ["wifi.fs", "mqtt.fs"]
+  }
+}

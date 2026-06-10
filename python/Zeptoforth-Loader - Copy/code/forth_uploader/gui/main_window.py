@@ -85,63 +85,70 @@ class MainWindow(QWidget):
         # --- Middle: file list + serial monitor ---
         # Using QSplitter for horizontal adjustability
         mid_splitter = QSplitter(Qt.Horizontal)  # Create the main horizontal splitter
+        left = QVBoxLayout()
 
-        # 2.0. Left Section: Tabbed Widget for Monitor and Files
-        self.tab_widget_left = QTabWidget()
+        # The existing choose folder button, file list, and upload buttons
+        # will go into this 'left' QVBoxLayout.
 
-        # --- a. Monitor Tab (moved from middle) ---
+        # and a button to load a reference file into reference tab
+        self.reference_btn = QPushButton("Choose Reference File")
+        self.reference_btn.clicked.connect(self.open_Reference_File)
+        left.addWidget(self.reference_btn)
+
+        self.choose_btn = QPushButton("Choose Folder")
+        self.choose_btn.clicked.connect(self.on_choose_folder)
+        left.addWidget(self.choose_btn)
+
+        self.file_list = QListWidget()
+        self.file_list.itemClicked.connect(self.load_selected_file)
+        self.file_list.setSelectionMode(QListWidget.MultiSelection)
+        # Apply graduated fade color to the file_list QListWidget
+        # Using a subtle linear gradient from a light grey to an off-white
+        # Updated to a faded graded light green color
+        self.file_list.setStyleSheet("""
+            QListWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0FFE0, stop:1 #F0FFF0);
+                border: 1px solid #C0C0C0;
+            }""")
+        left.addWidget(self.file_list)
+
+        self.upload_sel_btn = QPushButton("Upload Selected")
+        self.upload_sel_btn.clicked.connect(self.on_upload_selected)
+        left.addWidget(self.upload_sel_btn)
+
+        self.upload_all_btn = QPushButton("Upload All")
+        self.upload_all_btn.clicked.connect(self.on_upload_all)
+        left.addWidget(self.upload_all_btn)  # Add to the left QVBoxLayout
+
+        left_widget = QWidget()  # This widget holds the left QVBoxLayout
+        left_widget.setLayout(left)
+
+        # 2. Middle Section: Tabbed Widget for Monitor and Scratchpad
+        self.tab_widget = QTabWidget()
+
         self.monitor = ForthMonitorTextEdit()
         self.monitor.return_pressed.connect(self.on_monitor_return_pressed)
-        self.monitor.setFont(QFont("Consolas", 10))
+
+        # Set the font to Courier for the monitor
+        font = QFont("Consolas", 10)  # QFont("Arial")  # Courier")
+        self.monitor.setFont(font)
         self.monitor.setStyleSheet("""
             QPlainTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
                 border: 1px solid #C0C0C0;
             }""")
 
+        # a. Monitor Tab content (existing monitor)
         monitor_tab_layout = QVBoxLayout()
         monitor_tab_layout.addWidget(self.monitor)
+
         self.clear_btn = QPushButton("Clear Monitor")
         self.clear_btn.clicked.connect(lambda: self.monitor.clear())
         monitor_tab_layout.addWidget(self.clear_btn)
-        monitor_tab_widget = QWidget()
+
+        monitor_tab_widget = QWidget()  # Container for the monitor tab
         monitor_tab_widget.setLayout(monitor_tab_layout)
-        self.tab_widget_left.addTab(monitor_tab_widget, "Monitor")
-
-        # --- b. Files Tab ---
-        files_tab_layout = QVBoxLayout()
-        self.reference_btn = QPushButton("Choose Reference File")
-        self.reference_btn.clicked.connect(self.open_Reference_File)
-        files_tab_layout.addWidget(self.reference_btn)
-
-        self.choose_btn = QPushButton("Choose Folder")
-        self.choose_btn.clicked.connect(self.on_choose_folder)
-        files_tab_layout.addWidget(self.choose_btn)
-
-        self.file_list = QListWidget()
-        self.file_list.itemClicked.connect(self.load_selected_file)
-        self.file_list.setSelectionMode(QListWidget.MultiSelection)
-        self.file_list.setStyleSheet("""
-            QListWidget {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0FFE0, stop:1 #F0FFF0);
-                border: 1px solid #C0C0C0;
-            }""")
-        files_tab_layout.addWidget(self.file_list)
-
-        self.upload_sel_btn = QPushButton("Upload Selected")
-        self.upload_sel_btn.clicked.connect(self.on_upload_selected)
-        files_tab_layout.addWidget(self.upload_sel_btn)
-
-        self.upload_all_btn = QPushButton("Upload All")
-        self.upload_all_btn.clicked.connect(self.on_upload_all)
-        files_tab_layout.addWidget(self.upload_all_btn)
-
-        files_tab_widget = QWidget()
-        files_tab_widget.setLayout(files_tab_layout)
-        self.tab_widget_left.addTab(files_tab_widget, "Files")
-
-        # 2. Middle Section: Tabbed Widget for Scratchpad and Reference
-        self.tab_widget = QTabWidget()
+        self.tab_widget.addTab(monitor_tab_widget, "Monitor")
 
         # b. Scratchpad Tab (new plain text widget)
         self.scratchpad_text_edit = QPlainTextEdit()
@@ -231,7 +238,7 @@ class MainWindow(QWidget):
 
         # Add widgets to the splitter
         layout.addWidget(mid_splitter)  # Add the splitter to the main layout
-        mid_splitter.addWidget(self.tab_widget_left)
+        mid_splitter.addWidget(left_widget)
         mid_splitter.addWidget(self.tab_widget)  # Add the new tabbed widget as the middle section
         mid_splitter.addWidget(editor_widget)
 
