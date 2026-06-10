@@ -2,16 +2,95 @@ import os
 import json
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
-    QMessageBox
+    QMessageBox, QMenu
 )
 from PyQt5.QtGui import QFont
 from .forth_monitor_text_edit import ForthMonitorTextEdit
-from PyQt5.QtCore import Qt, QEvent
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal
 from serial_manager import SerialManager
 import serial.tools.list_ports
 
+class FileListWidget(QListWidget):
+    """Custom ListWidget that supports dragging files from Windows Explorer."""
+    files_dropped = pyqtSignal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+            paths = [u.toLocalFile() for u in event.mimeData().urls()]
+            self.files_dropped.emit(paths)
+        else:
+            event.ignore()
+
+    def show_context_menu(self, pos):
+        """Displays a right-click menu to remove items or clear the list."""
+        menu = QMenu(self)
+        remove_action = menu.addAction("Remove Selected")
+        clear_action = menu.addAction("Clear All")
+        
+        # Execute menu at global cursor position
+        action = menu.exec_(self.viewport().mapToGlobal(pos))
+        
+        if action == remove_action:
+            for item in self.selectedItems():
+                self.takeItem(self.row(item))
+        elif action == clear_action:
+            self.clear()
+
+class ReferenceTextEdit(QPlainTextEdit):
+    """Custom QPlainTextEdit that supports dropping a file to load its content."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+            file_path = event.mimeData().urls()[0].toLocalFile()
+            if os.path.isfile(file_path) and file_path.lower().endswith((".fs", ".f", ".txt")):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        self.setPlainText(f.read())
+                except Exception as e:
+                    print(f"Error loading dropped file: {e}")
+        else:
+            super().dropEvent(event)
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -118,7 +197,8 @@ class MainWindow(QWidget):
         self.choose_btn.clicked.connect(self.on_choose_folder)
         files_tab_layout.addWidget(self.choose_btn)
 
-        self.file_list = QListWidget()
+        self.file_list = FileListWidget()
+        self.file_list.files_dropped.connect(self.add_dropped_files)
         self.file_list.itemClicked.connect(self.load_selected_file)
         self.file_list.setSelectionMode(QListWidget.MultiSelection)
         self.file_list.setStyleSheet("""
@@ -161,7 +241,7 @@ class MainWindow(QWidget):
         self.tab_widget.addTab(scratchpad_tab_widget, "Editor Copy")
 
         # c. Add a second qplaintext to tab control
-        self.reference_text_edit = QPlainTextEdit()
+        self.reference_text_edit = ReferenceTextEdit()
         self.reference_text_edit.setFont(QFont("Consolas", 10))
         self.reference_text_edit.setStyleSheet("""
             QPlainTextEdit {
@@ -519,18 +599,40 @@ class MainWindow(QWidget):
             self.current_folder = folder
             self.load_files()
 
+    def add_file_path(self, path):
+        """Adds a file to the list widget, storing the full path in UserRole."""
+        # Avoid duplicate paths
+        for i in range(self.file_list.count()):
+            if self.file_list.item(i).data(Qt.UserRole) == path:
+                return
+
+        name = os.path.basename(path)
+        item = QListWidgetItem(name)
+        item.setData(Qt.UserRole, path)
+        item.setToolTip(path)  # Show full path on hover
+        self.file_list.addItem(item)
+
+    def add_dropped_files(self, paths):
+        """Processes files dropped onto the list widget."""
+        for path in paths:
+            if os.path.isfile(path) and path.lower().endswith((".fs", ".f", ".txt")):
+                self.add_file_path(path)
+
     def load_files(self):
-        self.files = [f for f in os.listdir(self.current_folder) if f.lower().endswith((".fs", ".f"))]
         self.file_list.clear()
-        self.file_list.addItems(self.files)
+        if os.path.isdir(self.current_folder):
+            for f in os.listdir(self.current_folder):
+                if f.lower().endswith((".fs", ".f", ".txt")):
+                    self.add_file_path(os.path.join(self.current_folder, f))
 
     def on_upload_selected(self):
         self.setCursor(Qt.WaitCursor)
         self.upload_all_btn.setEnabled(False)
         self.upload_sel_btn.setEnabled(False)
         for item in self.file_list.selectedItems():
-            path = os.path.join(self.current_folder, item.text())
-            self.serial.upload_file(path)
+            path = item.data(Qt.UserRole)
+            if path:
+                self.serial.upload_file(path)
 
         self.setCursor(Qt.ArrowCursor)
         self.upload_all_btn.setEnabled(True)
@@ -548,9 +650,11 @@ class MainWindow(QWidget):
         self.setCursor(Qt.WaitCursor)
         self.upload_all_btn.setEnabled(False)
         self.upload_sel_btn.setEnabled(False)
-        for f in self.files:
-            path = os.path.join(self.current_folder, f)
-            self.serial.upload_file(path)
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            path = item.data(Qt.UserRole)
+            if path:
+                self.serial.upload_file(path)
 
         self.setCursor(Qt.ArrowCursor)
         self.upload_all_btn.setEnabled(True)
@@ -572,11 +676,9 @@ class MainWindow(QWidget):
             self.editor_fullpath = path
 
     def load_selected_file(self, item):
-        fname = item.text()  # The file path stored in the list
-        # we need the full path
-        path = os.path.join(self.current_folder, fname)
+        path = item.data(Qt.UserRole)
         try:
-            if path:
+            if path and os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 self.editor_text_edit.clear()
