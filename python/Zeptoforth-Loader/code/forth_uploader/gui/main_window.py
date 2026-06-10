@@ -4,7 +4,7 @@ import json
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
-    QMessageBox, QMenu
+    QMessageBox, QMenu, QProgressDialog, QApplication
 )
 from PyQt5.QtGui import QFont
 from .forth_monitor_text_edit import ForthMonitorTextEdit
@@ -626,6 +626,12 @@ class MainWindow(QWidget):
                     self.add_file_path(os.path.join(self.current_folder, f))
 
     def on_upload_selected(self):
+        progress = QProgressDialog("Please wait, uploading...", None, 0, 0, self)
+        progress.setWindowTitle("Uploading")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+        QApplication.processEvents()
+
         self.setCursor(Qt.WaitCursor)
         self.upload_all_btn.setEnabled(False)
         self.upload_sel_btn.setEnabled(False)
@@ -633,10 +639,14 @@ class MainWindow(QWidget):
             path = item.data(Qt.UserRole)
             if path:
                 self.serial.upload_file(path)
+                QApplication.processEvents()
 
         self.setCursor(Qt.ArrowCursor)
         self.upload_all_btn.setEnabled(True)
         self.upload_sel_btn.setEnabled(True)
+        progress.close()
+        self.tab_widget_left.setCurrentIndex(0)
+        self.monitor.setFocus()
 
     def on_monitor_return_pressed(self, line_to_send):
         ord_numbers = [ord(char) for char in line_to_send]
@@ -647,6 +657,12 @@ class MainWindow(QWidget):
         self.serial.send_line(line_to_send)
 
     def on_upload_all(self):
+        progress = QProgressDialog("Please wait, uploading all files...", None, 0, 0, self)
+        progress.setWindowTitle("Uploading")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+        QApplication.processEvents()
+
         self.setCursor(Qt.WaitCursor)
         self.upload_all_btn.setEnabled(False)
         self.upload_sel_btn.setEnabled(False)
@@ -655,10 +671,14 @@ class MainWindow(QWidget):
             path = item.data(Qt.UserRole)
             if path:
                 self.serial.upload_file(path)
+                QApplication.processEvents()
 
         self.setCursor(Qt.ArrowCursor)
         self.upload_all_btn.setEnabled(True)
         self.upload_sel_btn.setEnabled(True)
+        progress.close()
+        self.tab_widget_left.setCurrentIndex(0)
+        self.monitor.setFocus()
 
     def on_load_editor_file(self):
         """Load a file into the text editor."""
