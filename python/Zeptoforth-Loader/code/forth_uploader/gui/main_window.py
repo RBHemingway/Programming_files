@@ -96,7 +96,7 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PyQt5 Forth Uploader for zeptoforth")
-        self.resize(1600, 600)
+        self.resize(1600, 1000)
         self.setStyleSheet("background-color: #A0A0A0;")  # Medium grey background for the main window
 
         # Determine the base directory for profiles relative to the 'forth_uploader' package root
@@ -220,6 +220,21 @@ class MainWindow(QWidget):
         files_tab_widget.setLayout(files_tab_layout)
         self.tab_widget_left.addTab(files_tab_widget, "Files")
 
+        # --- c. Words Tab ---
+        words_tab_layout = QVBoxLayout()
+        self.definitions_list = QListWidget()
+        self.definitions_list.setFont(QFont("Consolas", 10))
+        self.definitions_list.setStyleSheet("""
+            QListWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFF0E0, stop:1 #FFF8F0);
+                border: 1px solid #C0C0C0;
+            }""")
+        self.definitions_list.itemClicked.connect(self.on_definition_clicked)
+        words_tab_layout.addWidget(self.definitions_list)
+        words_tab_widget = QWidget()
+        words_tab_widget.setLayout(words_tab_layout)
+        self.tab_widget_left.addTab(words_tab_widget, "Words")
+
         # 2. Middle Section: Tabbed Widget for Scratchpad and Reference
         self.tab_widget = QTabWidget()
 
@@ -266,6 +281,7 @@ class MainWindow(QWidget):
         self.editor_fullpath = ""
 
         self.editor_text_edit = QPlainTextEdit()
+        self.editor_text_edit.textChanged.connect(self.update_definitions_list)
         self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
         self.editor_text_edit.setStyleSheet("""
@@ -719,6 +735,10 @@ class MainWindow(QWidget):
             if path:
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(self.editor_text_edit.toPlainText())
+                # Update state so subsequent 'Save' operations target this new path
+                self.editor_fullpath = path
+                self.setWindowTitle(path)
+                self.editor_text_edit.document().setModified(False)
                 # if a json file re-load profiles
                 if os.path.splitext(path)[1].lower() == ".json":
                     self.load_profiles()
@@ -735,17 +755,16 @@ class MainWindow(QWidget):
         else:
             path = self.editor_fullpath
             try:
-                if path:
-                    with open(path, "w", encoding="utf-8") as f:
-                        f.write(self.editor_text_edit.toPlainText())
-                    # now copy the saved text into scratchpad
-                    text = self.editor_text_edit.toPlainText()
-                    self.scratchpad_text_edit.setPlainText(text)
-                    self.editor_text_edit.document().setModified(False)
-
-
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(self.editor_text_edit.toPlainText())
+                
+                # Sync the scratchpad and reset modification state
+                text = self.editor_text_edit.toPlainText()
+                self.scratchpad_text_edit.setPlainText(text)
+                self.editor_text_edit.document().setModified(False)
+                self.setWindowTitle(path)
             except Exception as e:
-                print("Error saving editor file", e)
+                QMessageBox.critical(self, "Error", f"Could not save file: {e}")
 
     def open_Reference_File(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -786,3 +805,27 @@ class MainWindow(QWidget):
             self.save_editor_btn.setStyleSheet("background-color: #a15a59; color: white;")
 
             # self.editor_text_edit.setStyleSheet("QPlainTextEdit { background-color: white; }")
+
+    def update_definitions_list(self):
+        """Update the list of Forth definitions (lines starting with ':') from the editor."""
+        self.definitions_list.clear()
+        text = self.editor_text_edit.toPlainText()
+        for i, line in enumerate(text.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith(":"):
+                # Format with 3-character wide line number prefix
+                display_text = f"{i:3} {stripped}"
+                self.definitions_list.addItem(display_text)
+
+    def on_definition_clicked(self, item):
+        """Jump to the corresponding line in the editor when a word is clicked."""
+        try:
+            # Extract the line number from the 3-character prefix
+            line_num = int(item.text()[:3].strip())
+            block = self.editor_text_edit.document().findBlockByLineNumber(line_num - 1)
+            cursor = self.editor_text_edit.textCursor()
+            cursor.setPosition(block.position())
+            self.editor_text_edit.setTextCursor(cursor)
+            self.editor_text_edit.setFocus()
+        except Exception:
+            pass
