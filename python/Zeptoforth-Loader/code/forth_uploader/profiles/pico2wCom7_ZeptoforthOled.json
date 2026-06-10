@@ -1,0 +1,32 @@
+{
+    "port": "COM7",
+    "baud": 115200,
+    "data_bits": 8,
+    "parity": "None",
+    "stop_bits": 1.0,
+    "pacing": 10,
+    "ignore_chars": 0,
+    "files": [
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/ssd1306.fs",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/Zeptoforth_I2C_Oled - No_Classes.fs",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/Zeptoforth_I2C_Oled.fs",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/Zeptoforth_I2C_Oled_Classes.fs",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/UploadFolder/AA-Zeptoforth_I2C_Oled_v1.fs"
+    ],
+    "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/UploadFolder/AA-Zeptoforth_I2C_Oled_v1.fs",
+    "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/ssd1306.fs",
+    "groups": {
+        "core": [
+            "core.fs",
+            "math.fs"
+        ],
+        "drivers": [
+            "gpio.fs",
+            "spi.fs"
+        ],
+        "wifi": [
+            "wifi.fs",
+            "mqtt.fs"
+        ]
+    }
+}

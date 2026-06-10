@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
     QMessageBox, QMenu, QProgressDialog, QApplication
 )
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QColor
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal
 from serial_manager import SerialManager
@@ -118,6 +118,8 @@ class MainWindow(QWidget):
         self.current_folder = os.getcwd()
         self.files = []
         self.selected_profile_name = None  # To store the actively selected profile
+        self.reference_fullpath = ""
+        self.last_loaded_files = []        # To track file list changes for auto-saving
 
         self.build_ui()
         self.refresh_ports()
@@ -243,6 +245,22 @@ class MainWindow(QWidget):
         words_tab_widget.setLayout(words_tab_layout)
         self.tab_widget_left.addTab(words_tab_widget, "Words")
 
+        # Set tab background colors via stylesheet
+        self.tab_widget_left.setStyleSheet("""
+            QTabBar::tab {
+                color: black;
+                padding: 6px 15px;
+                min-width: 80px;
+                background: #E0FFE0; /* Default (Middle): Files Green */
+                border: 1px solid #C0C0C0;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:first { background: #8082F7; } /* Monitor Blue */
+            QTabBar::tab:last { background: #FFF0E0; }  /* Words Brown */
+            QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
+        """)
+
         # 2. Middle Section: Tabbed Widget for Scratchpad and Reference
         self.tab_widget = QTabWidget()
 
@@ -295,6 +313,21 @@ class MainWindow(QWidget):
         words_tab_widget_2.setLayout(words_tab_layout_2)
         self.tab_widget.addTab(words_tab_widget_2, "Words")
 
+        # Set tab background colors via stylesheet
+        self.tab_widget.setStyleSheet("""
+            QTabBar::tab {
+                color: black;
+                padding: 6px 15px;
+                min-width: 120px;
+                background: #E0FFE0; /* Default (First/Middle): Editor/Ref Green */
+                border: 1px solid #C0C0C0;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:last { background: #FFF0E0; }  /* Words Brown */
+            QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
+        """)
+
         # 3. Right Section: Existing Editor Window
         editor_layout = QVBoxLayout()  # Define the editor_layout here
 
@@ -333,6 +366,8 @@ class MainWindow(QWidget):
         editor_widget.setLayout(editor_layout)
 
         self.profile_combo = QComboBox()
+        self.profile_combo.setMinimumContentsLength(30)
+        self.profile_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.load_profiles()
         # This connection is intentionally placed after load_profiles() to prevent it from firing during initial population
         # Moved this connection AFTER load_profiles() to prevent it from firing during initial population
@@ -340,13 +375,9 @@ class MainWindow(QWidget):
         top.addWidget(QLabel("Profile:"))
         top.addWidget(self.profile_combo)
 
-        # self.load_profile_btn = QPushButton("Load")
-        # self.load_profile_btn.clicked.connect(self.on_load_profile)
-        # top.addWidget(self.load_profile_btn)
-
-        # self.save_profile_btn = QPushButton("Save As…")
-        # self.save_profile_btn.clicked.connect(self.on_save_profile)
-        # top.addWidget(self.save_profile_btn)
+        self.save_profile_btn = QPushButton("Save Profile...")
+        self.save_profile_btn.clicked.connect(self.on_save_profile)
+        top.addWidget(self.save_profile_btn)
 
         # Add widgets to the splitter
         layout.addWidget(mid_splitter)  # Add the splitter to the main layout
@@ -366,11 +397,13 @@ class MainWindow(QWidget):
 
         self.profiles.sort()  # Sort profiles alphabetically for consistent display
 
+        self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
         if self.profiles:
             self.profile_combo.addItems(self.profiles)
         else:
             self.profile_combo.addItem("No profiles found")  # Provide feedback if empty
+        self.profile_combo.blockSignals(False)
 
         # Update the selected_profile_name with the initially displayed item and display its content
         self.selected_profile_name = self.profile_combo.currentText()
@@ -382,14 +415,19 @@ class MainWindow(QWidget):
         """Slot to update the internally stored selected profile name and preview its content.
                 This must use the text-editor window, not the monitor window
         """
+        # If files in the list changed since loading the last profile, auto-update it before switching
+        if self.selected_profile_name and self.selected_profile_name != "No profiles found":
+            current_files = [self.file_list.item(i).data(Qt.UserRole) for i in range(self.file_list.count())]
+            if current_files != self.last_loaded_files:
+                self._save_profile_by_name(self.selected_profile_name)
+                self.monitor.appendPlainText(f"Auto-updated profile before switch: {self.selected_profile_name}")
+
         self.selected_profile_name = text
         # print(f"DEBUG: Profile selection changed to: '{self.selected_profile_name}'")
         # Immediately preview the profile content when selection changes
         if self.selected_profile_name != "No profiles found":  # Only preview if a real profile exists
             # Apply the settings first, then preview the content
             self._apply_selected_profile_settings(self.selected_profile_name)
-            self.preview_profile_content(self.selected_profile_name)
-            self.editor_fullpath = ""  # save btn mustn't save this from here
 
     def _apply_selected_profile_settings(self, profile_name):
         """
@@ -496,12 +534,91 @@ class MainWindow(QWidget):
             # Store groups for future use
             self.module_groups = data.get("groups", {})
 
+            # --- Update File List (Project Repository behavior) ---
+            self.file_list.clear()
+            project_files = data.get("files", [])
+            for path in project_files:
+                if os.path.exists(path):
+                    self.add_file_path(path)
+
+            # Track current files to detect future changes
+            self.last_loaded_files = [self.file_list.item(i).data(Qt.UserRole) for i in range(self.file_list.count())]
+
+            # --- Load Editor and Reference Files ---
+            editor_path = data.get("editor_file", "")
+            if editor_path and os.path.exists(editor_path):
+                try:
+                    with open(editor_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    self.editor_text_edit.setPlainText(content)
+                    self.scratchpad_text_edit.setPlainText(content)
+                    self.editor_fullpath = editor_path
+                    self.setWindowTitle(editor_path)
+                except Exception as e:
+                    self.monitor.appendPlainText(f"Error loading saved editor file: {e}")
+
+            ref_path = data.get("reference_file", "")
+            if ref_path and os.path.exists(ref_path):
+                try:
+                    with open(ref_path, "r", encoding="utf-8") as f:
+                        self.reference_text_edit.setPlainText(f.read())
+                    self.reference_fullpath = ref_path
+                except Exception as e:
+                    self.monitor.appendPlainText(f"Error loading saved reference file: {e}")
+
             self.monitor.appendPlainText(f"Successfully applied settings from profile: {profile_name}")
         except Exception as e:
             self.monitor.appendPlainText(f"Error applying profile settings for '{profile_name}': {e}")
 
+    def _save_profile_by_name(self, profile_name):
+        """Internal helper to save current settings and the file list to a JSON file."""
+        actual_save_path = os.path.join(self.profile_dir, profile_name)
+        
+        # Gather the full paths of all files currently in the workspace list
+        file_paths = []
+        for i in range(self.file_list.count()):
+            file_paths.append(self.file_list.item(i).data(Qt.UserRole))
+
+        try:
+            baud_text = self.baud_combo.currentText()
+            baud_val = int(baud_text) if baud_text.isdigit() else 115200
+        except Exception:
+            baud_val = 115200
+
+        data = {
+            "port": self.port_combo.currentText(),
+            "baud": baud_val,
+            "data_bits": int(self.data_bits_combo.currentText()),
+            "parity": self.parity_combo.currentText(),
+            "stop_bits": float(self.stop_bits_combo.currentText()),
+            "pacing": self.pacing_slider.value(),
+            "ignore_chars": getattr(self, "ignoreChars", 0),
+            "files": file_paths,
+            "editor_file": self.editor_fullpath,
+            "reference_file": self.reference_fullpath,
+            "groups": getattr(self, "module_groups", {})
+        }
+
+        with open(actual_save_path, "w") as f:
+            json.dump(data, f, indent=4)
+        
+        self.last_loaded_files = list(file_paths)
+
     def on_save_profile(self):
-        return
+        """Saves current settings and the current file list into a project JSON file."""
+        suggested_path = os.path.join(self.profile_dir, "new_project.json")
+        full_user_selected_path, ok = QFileDialog.getSaveFileName(
+            self, "Save Project/Profile As", suggested_path, "JSON Files (*.json)"
+        )
+        if not ok or not full_user_selected_path:
+            return
+
+        filename = os.path.basename(full_user_selected_path)
+        self._save_profile_by_name(filename)
+
+        self.monitor.appendPlainText(f"Saved project profile: {filename}")
+        self.load_profiles()
+        self.profile_combo.setCurrentText(filename)
 
     def preview_profile_content(self, profile_name):
         """
@@ -523,40 +640,6 @@ class MainWindow(QWidget):
         json_string = json.dumps(data, indent=4)
         self.editor_text_edit.appendPlainText(json_string)
         # self.editor_text_edit.appendPlainText(f"--- End Preview of {profile_name} ---")
-
-    def on_load_profile(self):
-        """Load button now just triggers the application of the currently selected profile."""
-        # Guide the user to the 'profiles' directory by default.
-        # However, to ensure profiles are always saved IN this directory,
-        # we'll extract just the filename from their input.
-        suggested_path = os.path.join(self.profile_dir, "new_profile.json")
-        full_user_selected_path, ok = QFileDialog.getSaveFileName(
-            self, "Save Profile As", suggested_path, "JSON Files (*.json)"
-        )
-        if not ok or not full_user_selected_path:
-            return
-
-        # Extract only the base filename to ensure it's saved within our 
-        # profiles directory
-        filename = os.path.basename(full_user_selected_path)
-        actual_save_path = os.path.join(self.profile_dir, filename)
-
-        data = {
-            "folder": self.current_folder,
-            "port": self.port_combo.currentText(),
-            "baud": int(self.baud_combo.currentText()),
-            "data_bits": int(self.data_bits_combo.currentText()),
-            "parity": self.parity_combo.currentText(),
-            "stop_bits": float(self.stop_bits_combo.currentText()),  # Store as float for 1.5
-            "pacing": self.pacing_slider.value(),
-            "groups": getattr(self, "module_groups", {})
-        }
-
-        with open(actual_save_path, "w") as f:
-            json.dump(data, f, indent=4)
-
-        self.monitor.appendPlainText(f"Saved profile: {actual_save_path}")
-        self.load_profiles()
 
     # --- Serial callbacks ---
     def on_serial_rx(self, text):
@@ -796,6 +879,7 @@ class MainWindow(QWidget):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 self.reference_text_edit.setPlainText(f.read())
+            self.reference_fullpath = path
         except Exception as e:
             print("Error loading reference file:", e)
 
@@ -856,6 +940,7 @@ class MainWindow(QWidget):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 self.reference_text_edit.setPlainText(text)
+                self.reference_fullpath = path
                 self.tab_widget.setCurrentIndex(1)  # Switch to Reference tab (index 1)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not load reference: {e}")
