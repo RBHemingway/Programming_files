@@ -408,14 +408,6 @@ class MainWindow(QWidget):
 
         # Apply settings with validation
         try:
-            self.current_folder = data.get("folder", self.current_folder)
-            # Ensure folder exists before attempting to load files
-            if not os.path.isdir(self.current_folder):
-                self.monitor.appendPlainText(
-                    f"Warning: Profile folder '{self.current_folder}' not found. Defaulting to current.")
-                self.current_folder = os.getcwd()
-            self.load_files()  # Load files from the specified folder
-
             # --- Update Port ComboBox ---
             profile_port = data.get("port", "")
             if profile_port and self.port_combo.findText(profile_port) == -1:  # If port not in current list
@@ -605,6 +597,9 @@ class MainWindow(QWidget):
             self.monitor.clear()
             self.monitor.appendPlainText("Disconnected.")
             self.connect_btn.setText("Connect")
+
+        self.tab_widget_left.setCurrentIndex(0)
+        self.monitor.setFocus()
 
     def on_pacing_change(self, value):
         self.serial.set_pacing(value)
