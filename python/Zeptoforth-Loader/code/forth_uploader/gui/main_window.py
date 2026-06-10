@@ -6,9 +6,9 @@ from PyQt5.QtWidgets import (
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
     QMessageBox, QMenu, QProgressDialog, QApplication
 )
-from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtGui import QFont, QColor, QDesktopServices
 from .forth_monitor_text_edit import ForthMonitorTextEdit
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl
 from serial_manager import SerialManager
 import serial.tools.list_ports
 
@@ -40,7 +40,13 @@ class FileListWidget(QListWidget):
         if event.mimeData().hasUrls():
             event.setDropAction(Qt.CopyAction)
             event.accept()
-            paths = [u.toLocalFile() for u in event.mimeData().urls()]
+            paths = []
+            for u in event.mimeData().urls():
+                if u.isLocalFile():
+                    paths.append(u.toLocalFile())
+                else:
+                    # This handles web URLs dragged from a browser
+                    paths.append(u.toString())
             self.files_dropped.emit(paths)
         else:
             event.ignore()
@@ -189,42 +195,78 @@ class MainWindow(QWidget):
 
         monitor_tab_layout = QVBoxLayout()
         monitor_tab_layout.addWidget(self.monitor)
+
+        monitor_btn_layout = QHBoxLayout()
         self.clear_btn = QPushButton("Clear Monitor")
         self.clear_btn.clicked.connect(lambda: self.monitor.clear())
-        monitor_tab_layout.addWidget(self.clear_btn)
+        monitor_btn_layout.addWidget(self.clear_btn)
+
+        self.new_profile_btn = QPushButton("New Profile")
+        self.new_profile_btn.clicked.connect(self.on_new_profile)
+        monitor_btn_layout.addWidget(self.new_profile_btn)
+
+        monitor_tab_layout.addLayout(monitor_btn_layout)
         monitor_tab_widget = QWidget()
         monitor_tab_widget.setLayout(monitor_tab_layout)
         self.tab_widget_left.addTab(monitor_tab_widget, "Monitor")
 
         # --- b. Files Tab ---
         files_tab_layout = QVBoxLayout()
+        folder_ref_btns_layout = QHBoxLayout()
+
         self.reference_btn = QPushButton("Choose Reference File")
         self.reference_btn.clicked.connect(self.open_Reference_File)
-        files_tab_layout.addWidget(self.reference_btn)
+        folder_ref_btns_layout.addWidget(self.reference_btn)
 
         self.choose_btn = QPushButton("Choose Folder")
         self.choose_btn.clicked.connect(self.on_choose_folder)
-        files_tab_layout.addWidget(self.choose_btn)
+        folder_ref_btns_layout.addWidget(self.choose_btn)
+        files_tab_layout.addLayout(folder_ref_btns_layout)
 
-        self.file_list = FileListWidget()
-        self.file_list.files_dropped.connect(self.add_dropped_files)
-        self.file_list.open_in_reference.connect(self.load_into_reference)
-        self.file_list.itemClicked.connect(self.load_selected_file)
-        self.file_list.setSelectionMode(QListWidget.SingleSelection)
-        self.file_list.setStyleSheet("""
-            QListWidget {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0FFE0, stop:1 #F0FFF0);
-                border: 1px solid #C0C0C0;
-            }""")
-        files_tab_layout.addWidget(self.file_list)
+        # Vertical splitter for Code and Documentation lists
+        self.files_v_splitter = QSplitter(Qt.Vertical)
+        
+        # Code List
+        self.code_file_list = FileListWidget()
+        self._setup_file_list(self.code_file_list)
+        code_container = QWidget()
+        code_layout = QVBoxLayout(code_container)
+        code_layout.setContentsMargins(0,0,0,0)
+        code_layout.addWidget(QLabel("Code Files (.fs, .f):"))
+        code_layout.addWidget(self.code_file_list)
 
+        # Upload buttons placed directly below the code list
+        upload_btns_layout = QHBoxLayout()
         self.upload_sel_btn = QPushButton("Upload Selected")
         self.upload_sel_btn.clicked.connect(self.on_upload_selected)
-        files_tab_layout.addWidget(self.upload_sel_btn)
+        upload_btns_layout.addWidget(self.upload_sel_btn)
 
         self.upload_all_btn = QPushButton("Upload All")
         self.upload_all_btn.clicked.connect(self.on_upload_all)
-        files_tab_layout.addWidget(self.upload_all_btn)
+        upload_btns_layout.addWidget(self.upload_all_btn)
+        code_layout.addLayout(upload_btns_layout)
+
+        self.files_v_splitter.addWidget(code_container)
+
+        # Documentation List
+        self.doc_file_list = FileListWidget()
+        self._setup_file_list(self.doc_file_list)
+        doc_container = QWidget()
+        doc_layout = QVBoxLayout(doc_container)
+        doc_layout.setContentsMargins(0,0,0,0)
+        doc_layout.addWidget(QLabel("Documentation & URLs:"))
+        doc_layout.addWidget(self.doc_file_list)
+        self.files_v_splitter.addWidget(doc_container)
+
+        style = """
+            QListWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0FFE0, stop:1 #F0FFF0);
+                border: 1px solid #C0C0C0;
+            }"""
+        self.code_file_list.setStyleSheet(style)
+        self.doc_file_list.setStyleSheet(style)
+        
+        files_tab_layout.addWidget(self.files_v_splitter)
 
         files_tab_widget = QWidget()
         files_tab_widget.setLayout(files_tab_layout)
@@ -385,6 +427,13 @@ class MainWindow(QWidget):
         mid_splitter.addWidget(self.tab_widget)  # Add the new tabbed widget as the middle section
         mid_splitter.addWidget(editor_widget)
 
+    def _setup_file_list(self, list_widget):
+        """Helper to initialize file list settings and connections."""
+        list_widget.files_dropped.connect(self.add_dropped_files)
+        list_widget.open_in_reference.connect(self.load_into_reference)
+        list_widget.itemClicked.connect(self.load_selected_file)
+        list_widget.setSelectionMode(QListWidget.SingleSelection)
+
     def load_profiles(self):
         # Ensure the profile directory exists before trying to list its contents
         os.makedirs(self.profile_dir, exist_ok=True)
@@ -417,7 +466,7 @@ class MainWindow(QWidget):
         """
         # If files in the list changed since loading the last profile, auto-update it before switching
         if self.selected_profile_name and self.selected_profile_name != "No profiles found":
-            current_files = [self.file_list.item(i).data(Qt.UserRole) for i in range(self.file_list.count())]
+            current_files = self._get_all_file_paths()
             if current_files != self.last_loaded_files:
                 self._save_profile_by_name(self.selected_profile_name)
                 self.monitor.appendPlainText(f"Auto-updated profile before switch: {self.selected_profile_name}")
@@ -535,14 +584,15 @@ class MainWindow(QWidget):
             self.module_groups = data.get("groups", {})
 
             # --- Update File List (Project Repository behavior) ---
-            self.file_list.clear()
+            self.code_file_list.clear()
+            self.doc_file_list.clear()
             project_files = data.get("files", [])
             for path in project_files:
-                if os.path.exists(path):
-                    self.add_file_path(path)
+                # add_file_path handles path validation and distribution
+                self.add_file_path(path)
 
             # Track current files to detect future changes
-            self.last_loaded_files = [self.file_list.item(i).data(Qt.UserRole) for i in range(self.file_list.count())]
+            self.last_loaded_files = self._get_all_file_paths()
 
             # --- Load Editor and Reference Files ---
             editor_path = data.get("editor_file", "")
@@ -570,14 +620,20 @@ class MainWindow(QWidget):
         except Exception as e:
             self.monitor.appendPlainText(f"Error applying profile settings for '{profile_name}': {e}")
 
+    def _get_all_file_paths(self):
+        """Gathers paths from both code and documentation lists."""
+        paths = []
+        for i in range(self.code_file_list.count()):
+            paths.append(self.code_file_list.item(i).data(Qt.UserRole))
+        for i in range(self.doc_file_list.count()):
+            paths.append(self.doc_file_list.item(i).data(Qt.UserRole))
+        return paths
+
     def _save_profile_by_name(self, profile_name):
         """Internal helper to save current settings and the file list to a JSON file."""
         actual_save_path = os.path.join(self.profile_dir, profile_name)
         
-        # Gather the full paths of all files currently in the workspace list
-        file_paths = []
-        for i in range(self.file_list.count()):
-            file_paths.append(self.file_list.item(i).data(Qt.UserRole))
+        file_paths = self._get_all_file_paths()
 
         try:
             baud_text = self.baud_combo.currentText()
@@ -619,6 +675,34 @@ class MainWindow(QWidget):
         self.monitor.appendPlainText(f"Saved project profile: {filename}")
         self.load_profiles()
         self.profile_combo.setCurrentText(filename)
+
+    def on_new_profile(self):
+        """Saves current profile if file list changed, then clears workspace."""
+        if self.selected_profile_name and self.selected_profile_name != "No profiles found":
+            current_files = self._get_all_file_paths()
+            if current_files != self.last_loaded_files:
+                self._save_profile_by_name(self.selected_profile_name)
+                self.monitor.appendPlainText(f"Auto-saved profile: {self.selected_profile_name}")
+
+        # Clear UI components
+        self.code_file_list.clear()
+        self.doc_file_list.clear()
+        self.editor_text_edit.clear()
+        self.scratchpad_text_edit.clear()
+        self.reference_text_edit.clear()
+
+        # Reset internal state
+        self.editor_fullpath = ""
+        self.reference_fullpath = ""
+        self.last_loaded_files = []
+        self.selected_profile_name = None
+
+        # Reset profile combo and title without triggering signals
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.setCurrentIndex(-1)
+        self.profile_combo.blockSignals(False)
+        self.setWindowTitle("PyQt5 Forth Uploader for zeptoforth")
+        self.monitor.appendPlainText("Workspace cleared for new profile.")
 
     def preview_profile_content(self, profile_name):
         """
@@ -718,27 +802,41 @@ class MainWindow(QWidget):
 
     def add_file_path(self, path):
         """Adds a file to the list widget, storing the full path in UserRole."""
+        lower_path = path.lower()
+        
         # Avoid duplicate paths
-        for i in range(self.file_list.count()):
-            if self.file_list.item(i).data(Qt.UserRole) == path:
-                return
+        if path in self._get_all_file_paths():
+            return
 
-        name = os.path.basename(path)
+        # Determine which list to use
+        is_forth = lower_path.endswith((".fs", ".f")) and not lower_path.startswith("http")
+        target_list = self.code_file_list if is_forth else self.doc_file_list
+
+        if lower_path.startswith(("http://", "https://")):
+            name = path
+        else:
+            if not os.path.exists(path):
+                return
+            name = os.path.basename(path)
+            
         item = QListWidgetItem(name)
         item.setData(Qt.UserRole, path)
         item.setToolTip(path)  # Show full path on hover
-        self.file_list.addItem(item)
+        target_list.addItem(item)
 
     def add_dropped_files(self, paths):
         """Processes files dropped onto the list widget."""
         for path in paths:
-            if os.path.isfile(path) and path.lower().endswith((".fs", ".f", ".txt")):
+            lp = path.lower()
+            if lp.startswith(("http://", "https://")):
+                self.add_file_path(path)
+            elif os.path.isfile(path) and lp.endswith((".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
                 self.add_file_path(path)
 
     def load_files(self):
         if os.path.isdir(self.current_folder):
             for f in os.listdir(self.current_folder):
-                if f.lower().endswith((".fs", ".f", ".txt")):
+                if f.lower().endswith((".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
                     self.add_file_path(os.path.join(self.current_folder, f))
 
     def on_upload_selected(self):
@@ -751,9 +849,14 @@ class MainWindow(QWidget):
         self.setCursor(Qt.WaitCursor)
         self.upload_all_btn.setEnabled(False)
         self.upload_sel_btn.setEnabled(False)
-        for item in self.file_list.selectedItems():
+        
+        # Collect selected items from both lists
+        selected_items = self.code_file_list.selectedItems() + self.doc_file_list.selectedItems()
+        
+        for item in selected_items:
             path = item.data(Qt.UserRole)
-            if path:
+            # Only upload Forth source files
+            if path and path.lower().endswith((".fs", ".f")) and not path.lower().startswith("http"):
                 self.serial.upload_file(path)
                 QApplication.processEvents()
 
@@ -782,10 +885,12 @@ class MainWindow(QWidget):
         self.setCursor(Qt.WaitCursor)
         self.upload_all_btn.setEnabled(False)
         self.upload_sel_btn.setEnabled(False)
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
+        
+        # "Upload All" typically refers to the code files
+        for i in range(self.code_file_list.count()):
+            item = self.code_file_list.item(i)
             path = item.data(Qt.UserRole)
-            if path:
+            if path and path.lower().endswith((".fs", ".f")) and not path.lower().startswith("http"):
                 self.serial.upload_file(path)
                 QApplication.processEvents()
 
@@ -813,6 +918,16 @@ class MainWindow(QWidget):
 
     def load_selected_file(self, item):
         path = item.data(Qt.UserRole)
+        if not path:
+            return
+
+        lower_path = path.lower()
+        # If it's a URL or a binary document, open with system default
+        # Added .txt, .html, and .epub to external open list per user request
+        if lower_path.startswith(("http://", "https://")) or lower_path.endswith((".docx", ".pdf", ".txt", ".html", ".epub")):
+            QDesktopServices.openUrl(QUrl(path) if lower_path.startswith("http") else QUrl.fromLocalFile(path))
+            return
+
         try:
             if path and os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
@@ -936,7 +1051,7 @@ class MainWindow(QWidget):
     def load_into_reference(self, path):
         """Loads a file into the reference text edit and switches to its tab."""
         try:
-            if path and os.path.exists(path):
+            if path and os.path.exists(path) and path.lower().endswith((".fs", ".f", ".txt")):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 self.reference_text_edit.setPlainText(text)
