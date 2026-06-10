@@ -1,0 +1,30 @@
+{
+    "port": "COM7",
+    "baud": 115200,
+    "data_bits": 8,
+    "parity": "None",
+    "stop_bits": 1.0,
+    "pacing": 10,
+    "ignore_chars": 0,
+    "files": [
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.f",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Zeptoforth_I2C_Oled_BME280.f",
+        "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Sensors_files/pdfs\\bme280.pdf"
+    ],
+    "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.f",
+    "reference_file": "",
+    "groups": {
+        "core": [
+            "core.fs",
+            "math.fs"
+        ],
+        "drivers": [
+            "gpio.fs",
+            "spi.fs"
+        ],
+        "wifi": [
+            "wifi.fs",
+            "mqtt.fs"
+        ]
+    }
+}

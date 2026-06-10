@@ -4,9 +4,9 @@ import json
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QSplitter, QTabWidget,
-    QMessageBox, QMenu, QProgressDialog, QApplication
+    QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut
 )
-from PyQt5.QtGui import QFont, QColor, QDesktopServices
+from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl
 from serial_manager import SerialManager
@@ -389,6 +389,10 @@ class MainWindow(QWidget):
                 padding: 5px;
             }""")
         editor_layout.addWidget(self.editor_text_edit)
+
+        self.comment_shortcut = QShortcut(QKeySequence("Ctrl+/"), self.editor_text_edit)
+        self.comment_shortcut.setContext(Qt.WidgetShortcut)
+        self.comment_shortcut.activated.connect(self.on_toggle_comment)
 
         editor_buttons_layout = QHBoxLayout()
         self.load_editor_btn = QPushButton("Load File...")
@@ -907,10 +911,8 @@ class MainWindow(QWidget):
         if path:
             with open(path, "r", encoding="utf-8") as f:
                 text = f.read()
-            self.editor_text_edit.clear()
             self.editor_text_edit.setPlainText(text)
             # and into scratchpad
-            self.scratchpad_text_edit.clear()
             self.scratchpad_text_edit.setPlainText(text)
 
             self.setWindowTitle(path)
@@ -932,10 +934,8 @@ class MainWindow(QWidget):
             if path and os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
-                self.editor_text_edit.clear()
                 self.editor_text_edit.setPlainText(text)
                 # and also into scratchpad
-                self.scratchpad_text_edit.clear()
                 self.scratchpad_text_edit.setPlainText(text)
 
                 # self.editor_label.setText(path)
@@ -1047,6 +1047,45 @@ class MainWindow(QWidget):
             self.editor_text_edit.setFocus()
         except Exception:
             pass
+
+    def on_toggle_comment(self):
+        """Toggle Forth-style comments (\\ ) on the selected line(s) in the editor."""
+        cursor = self.editor_text_edit.textCursor()
+        start_pos = cursor.selectionStart()
+        end_pos = cursor.selectionEnd()
+
+        # Use a helper cursor to identify the start and end blocks directly
+        helper = self.editor_text_edit.textCursor()
+        helper.setPosition(start_pos)
+        current_block = helper.block()
+        
+        helper.setPosition(end_pos)
+        # If selection ends exactly at the start of a block, don't include that last block
+        if helper.columnNumber() == 0 and end_pos > start_pos:
+            last_block = helper.block().previous()
+        else:
+            last_block = helper.block()
+
+        cursor.beginEditBlock()
+        worker = self.editor_text_edit.textCursor()
+        
+        # Iterate through blocks from the start of selection to the end
+        while current_block.isValid():
+            worker.setPosition(current_block.position())
+            text = current_block.text()
+            
+            if text.startswith("\\"):
+                n = 2 if text.startswith("\\ ") else 1
+                worker.movePosition(worker.Right, worker.KeepAnchor, n)
+                worker.removeSelectedText()
+            else:
+                worker.insertText("\\ ")
+                
+            if current_block == last_block:
+                break
+            current_block = current_block.next()
+            
+        cursor.endEditBlock()
 
     def load_into_reference(self, path):
         """Loads a file into the reference text edit and switches to its tab."""
