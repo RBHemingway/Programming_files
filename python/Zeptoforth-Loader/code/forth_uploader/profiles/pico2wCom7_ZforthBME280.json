@@ -7,8 +7,8 @@
     "pacing": 10,
     "ignore_chars": 0,
     "files": [
-        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.f",
-        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Zeptoforth_I2C_Oled_BME280.f",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.zf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Zeptoforth_I2C_Oled_BME280.zf",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/UploadFolder/AA-Zeptoforth_I2C_Oled_v1.fs",
         "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Sensors_files/pdfs\\bme280.pdf",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/epub/zeptoforth.epub",
@@ -20,7 +20,7 @@
             "code": "i2c-target-addr!"
         }
     ],
-    "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.f",
+    "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.zf",
     "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/UploadFolder/AA-Zeptoforth_I2C_Oled_v1.fs",
     "groups": {
         "core": [

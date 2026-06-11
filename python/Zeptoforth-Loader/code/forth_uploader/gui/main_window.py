@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QTextEdit, QSplitter, QTabWidget,
     QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut, QInputDialog
 )
-from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat
+from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat, QTextFormat
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl, QSettings, QTimer
 from serial_manager import SerialManager
@@ -407,6 +407,9 @@ class MainWindow(QWidget):
         self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
         self.editor_text_edit.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.editor_text_edit.setCursorWidth(3)
+        self._find_highlights = []
+        self.editor_text_edit.cursorPositionChanged.connect(self.highlight_current_line)
         self.editor_text_edit.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.editor_text_edit.setStyleSheet("""
             QPlainTextEdit {
@@ -415,6 +418,7 @@ class MainWindow(QWidget):
                 padding: 5px;
             }""")
         editor_layout.addWidget(self.editor_text_edit)
+        self.highlight_current_line()
 
         self.comment_shortcut = QShortcut(QKeySequence("Ctrl+/"), self.editor_text_edit)
         self.comment_shortcut.setContext(Qt.WidgetShortcut)
@@ -566,6 +570,26 @@ class MainWindow(QWidget):
             return
 
         # Apply settings with validation
+        # Migration logic: Update stale .f/.fs references to .zf if the new file exists
+        profile_modified = False
+        def migrate_path(p):
+            nonlocal profile_modified
+            if p and not os.path.exists(p) and p.lower().endswith((".f", ".fs")):
+                zf_candidate = os.path.splitext(p)[0] + ".zf"
+                if os.path.exists(zf_candidate):
+                    profile_modified = True
+                    return zf_candidate
+            return p
+
+        data["files"] = [migrate_path(p) for p in data.get("files", [])]
+        data["editor_file"] = migrate_path(data.get("editor_file", ""))
+        data["reference_file"] = migrate_path(data.get("reference_file", ""))
+
+        if profile_modified:
+            with open(profile_path, "w") as f:
+                json.dump(data, f, indent=4)
+            self.monitor.appendPlainText(f"Migrated stale .f/.fs references to .zf in profile: {profile_name}")
+
         try:
             # --- Update Port ComboBox ---
             profile_port = data.get("port", "")
@@ -1095,6 +1119,22 @@ class MainWindow(QWidget):
         self.editor_fullpath = ""
         self.on_saveas_editor_file(context_dir)
 
+    def highlight_current_line(self):
+        """Highlights the line where the cursor is currently located."""
+        extra_selections = []
+        if not self.editor_text_edit.isReadOnly():
+            selection = QTextEdit.ExtraSelection()
+            line_color = QColor("#E8E8E8") # Light grey highlight
+            selection.format.setBackground(line_color)
+            selection.format.setProperty(QTextFormat.FullWidthSelection, True)
+            selection.cursor = self.editor_text_edit.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+        
+        # Re-apply any existing find highlights
+        extra_selections.extend(self._find_highlights)
+        self.editor_text_edit.setExtraSelections(extra_selections)
+
     def on_editor_modified_changed(self, modified):
         if modified:
             # Light yellow background when modified
@@ -1189,9 +1229,9 @@ class MainWindow(QWidget):
 
     def on_toggle_find_highlight(self):
         """Highlight all occurrences of selected text or clear if already highlighted."""
-        # If there are already extra selections (highlights), clear them and return
-        if self.editor_text_edit.extraSelections():
-            self.editor_text_edit.setExtraSelections([])
+        if self._find_highlights:
+            self._find_highlights = []
+            self.highlight_current_line()
             self.monitor.appendPlainText("Find highlights cleared.")
             return
 
@@ -1214,7 +1254,8 @@ class MainWindow(QWidget):
             extra_selections.append(selection)
             find_cursor = doc.find(search_text, find_cursor)
 
-        self.editor_text_edit.setExtraSelections(extra_selections)
+        self._find_highlights = extra_selections
+        self.highlight_current_line()
         self.monitor.appendPlainText(f"Highlighted {len(extra_selections)} occurrences of '{search_text}'.")
 
     def load_into_reference(self, path):
