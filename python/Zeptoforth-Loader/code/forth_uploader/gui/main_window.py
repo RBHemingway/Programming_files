@@ -106,6 +106,23 @@ class ReferenceTextEdit(QPlainTextEdit):
         else:
             super().dropEvent(event)
 
+class EditorTextEdit(QPlainTextEdit):
+    """Custom QPlainTextEdit that supports auto-indentation."""
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            cursor = self.textCursor()
+            line_text = cursor.block().text()
+            indent = ""
+            for char in line_text:
+                if char.isspace():
+                    indent += char
+                else:
+                    break
+            super().keyPressEvent(event)
+            self.insertPlainText(indent)
+        else:
+            super().keyPressEvent(event)
+
 class ForthHighlighter(QSyntaxHighlighter):
     """Highlighter that colors the first occurrence of a word in light blue."""
     def __init__(self, document):
@@ -361,7 +378,7 @@ class MainWindow(QWidget):
         self.tab_widget = QTabWidget()
 
         # b. Scratchpad Tab (new plain text widget)
-        self.scratchpad_text_edit = QPlainTextEdit()
+        self.scratchpad_text_edit = EditorTextEdit()
         self.scratchpad_text_edit.setFont(QFont("Consolas", 10))
         self.scratchpad_text_edit.setTabStopDistance(3 * self.scratchpad_text_edit.fontMetrics().width(' '))
         self.scratchpad_text_edit.setStyleSheet("""
@@ -451,7 +468,7 @@ class MainWindow(QWidget):
         editor_layout.addWidget(self.editor_label)
         self.editor_fullpath = ""
 
-        self.editor_text_edit = QPlainTextEdit()
+        self.editor_text_edit = EditorTextEdit()
         self.editor_text_edit.textChanged.connect(lambda: self.definition_timer.start(500))
         self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
