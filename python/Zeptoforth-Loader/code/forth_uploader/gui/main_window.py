@@ -322,6 +322,7 @@ class MainWindow(QWidget):
         # b. Scratchpad Tab (new plain text widget)
         self.scratchpad_text_edit = QPlainTextEdit()
         self.scratchpad_text_edit.setFont(QFont("Consolas", 10))
+        self.scratchpad_text_edit.setTabStopDistance(3 * self.scratchpad_text_edit.fontMetrics().width(' '))
         self.scratchpad_text_edit.setStyleSheet("""
             QPlainTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F0FFF0, stop:1 #E0dF80);
@@ -339,6 +340,7 @@ class MainWindow(QWidget):
         # c. Add a second qplaintext to tab control
         self.reference_text_edit = ReferenceTextEdit()
         self.reference_text_edit.setFont(QFont("Consolas", 10))
+        self.reference_text_edit.setTabStopDistance(3 * self.reference_text_edit.fontMetrics().width(' '))
         self.reference_text_edit.setStyleSheet("""
             QPlainTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F0FFF0, stop:1 #b0FF80);
@@ -412,6 +414,7 @@ class MainWindow(QWidget):
         self.editor_text_edit.textChanged.connect(lambda: self.definition_timer.start(500))
         self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
+        self.editor_text_edit.setTabStopDistance(3 * self.editor_text_edit.fontMetrics().width(' '))
         self.editor_text_edit.setContextMenuPolicy(Qt.CustomContextMenu)
         self.editor_text_edit.setCursorWidth(3)
         self._find_highlights = []
@@ -449,6 +452,7 @@ class MainWindow(QWidget):
 
         self.save_editor_btn = QPushButton("Save File")
         self.save_editor_btn.clicked.connect(self.on_save_editor_file)
+        self.save_editor_btn.installEventFilter(self)
         editor_buttons_layout.addWidget(self.save_editor_btn)
 
         editor_layout.addLayout(editor_buttons_layout)
@@ -1358,6 +1362,13 @@ class MainWindow(QWidget):
                 item.setText(new_name)
         elif action == delete_action:
             self.snippets_list.takeItem(self.snippets_list.row(item))
+
+    def eventFilter(self, watched, event):
+        """Intercept mouse enter events on the save button to trigger auto-save."""
+        if watched == self.save_editor_btn and event.type() == QEvent.Enter:
+            if self.editor_text_edit.document().isModified():
+                self.on_save_editor_file()
+        return super().eventFilter(watched, event)
 
     def closeEvent(self, event):
         """Save window geometry and splitter states on exit."""
