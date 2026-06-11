@@ -4,11 +4,11 @@ import json
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QTextEdit, QSplitter, QTabWidget,
-    QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut
+    QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut, QInputDialog
 )
 from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat
 from .forth_monitor_text_edit import ForthMonitorTextEdit
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl, QSettings, QTimer
 from serial_manager import SerialManager
 import serial.tools.list_ports
 
@@ -121,11 +121,18 @@ class MainWindow(QWidget):
         self.serial = SerialManager()
         self.serial.received.connect(self.on_serial_rx)
 
+        self.settings = QSettings("MyFilingSystem", "ZeptoforthLoader")
+
         self.current_folder = os.getcwd()
         self.files = []
         self.selected_profile_name = None  # To store the actively selected profile
         self.reference_fullpath = ""
         self.last_loaded_files = []        # To track file list changes for auto-saving
+
+        # Timer to debounce word list updates for better performance
+        self.definition_timer = QTimer()
+        self.definition_timer.setSingleShot(True)
+        self.definition_timer.timeout.connect(self.update_definitions_list)
 
         self.build_ui()
         self.refresh_ports()
@@ -178,7 +185,7 @@ class MainWindow(QWidget):
 
         # --- Middle: file list + serial monitor ---
         # Using QSplitter for horizontal adjustability
-        mid_splitter = QSplitter(Qt.Horizontal)  # Create the main horizontal splitter
+        self.mid_splitter = QSplitter(Qt.Horizontal)  # Create the main horizontal splitter
 
         # 2.0. Left Section: Tabbed Widget for Monitor and Files
         self.tab_widget_left = QTabWidget()
@@ -355,6 +362,23 @@ class MainWindow(QWidget):
         words_tab_widget_2.setLayout(words_tab_layout_2)
         self.tab_widget.addTab(words_tab_widget_2, "Words")
 
+        # e. Snippets Tab
+        snippets_tab_layout = QVBoxLayout()
+        self.snippets_list = QListWidget()
+        self.snippets_list.setFont(QFont("Consolas", 10))
+        self.snippets_list.setStyleSheet("""
+            QListWidget {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E0F0FF, stop:1 #F0F8FF);
+                border: 1px solid #C0C0C0;
+            }""")
+        self.snippets_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.snippets_list.customContextMenuRequested.connect(self.show_snippet_context_menu)
+        self.snippets_list.itemDoubleClicked.connect(self.on_snippet_double_clicked)
+        snippets_tab_layout.addWidget(self.snippets_list)
+        snippets_tab_widget = QWidget()
+        snippets_tab_widget.setLayout(snippets_tab_layout)
+        self.tab_widget.addTab(snippets_tab_widget, "Snippets")
+
         # Set tab background colors via stylesheet
         self.tab_widget.setStyleSheet("""
             QTabBar::tab {
@@ -366,20 +390,21 @@ class MainWindow(QWidget):
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
             }
-            QTabBar::tab:last { background: #FFF0E0; }  /* Words Brown */
+            QTabBar::tab:nth-last-child(2) { background: #FFF0E0; } /* Words Brown */
+            QTabBar::tab:last { background: #E0F0FF; }             /* Snippets Blue */
             QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
         """)
 
         # 3. Right Section: Existing Editor Window
         editor_layout = QVBoxLayout()  # Define the editor_layout here
 
-        self.editor_label = QLabel("File Editor:")
+        self.editor_label = QLabel("File Editor: (ctrl+ / F Q)")
         self.editor_label.setFont(QFont("Arial", 10, QFont.Bold))
         editor_layout.addWidget(self.editor_label)
         self.editor_fullpath = ""
 
         self.editor_text_edit = QPlainTextEdit()
-        self.editor_text_edit.textChanged.connect(self.update_definitions_list)
+        self.editor_text_edit.textChanged.connect(lambda: self.definition_timer.start(500))
         self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
         self.editor_text_edit.setStyleSheet("""
@@ -397,6 +422,10 @@ class MainWindow(QWidget):
         self.find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self.editor_text_edit)
         self.find_shortcut.setContext(Qt.WidgetShortcut)
         self.find_shortcut.activated.connect(self.on_toggle_find_highlight)
+
+        self.snippet_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self.editor_text_edit)
+        self.snippet_shortcut.setContext(Qt.WidgetShortcut)
+        self.snippet_shortcut.activated.connect(self.on_add_snippet)
 
         editor_buttons_layout = QHBoxLayout()
         self.load_editor_btn = QPushButton("Load File...")
@@ -430,10 +459,21 @@ class MainWindow(QWidget):
         top.addWidget(self.save_profile_btn)
 
         # Add widgets to the splitter
-        layout.addWidget(mid_splitter)  # Add the splitter to the main layout
-        mid_splitter.addWidget(self.tab_widget_left)
-        mid_splitter.addWidget(self.tab_widget)  # Add the new tabbed widget as the middle section
-        mid_splitter.addWidget(editor_widget)
+        layout.addWidget(self.mid_splitter)  # Add the splitter to the main layout
+        self.mid_splitter.addWidget(self.tab_widget_left)
+        self.mid_splitter.addWidget(self.tab_widget)  # Add the new tabbed widget as the middle section
+        self.mid_splitter.addWidget(editor_widget)
+
+        # Restore UI state (window size, position, and splitter handles)
+        geom = self.settings.value("geometry")
+        if geom:
+            self.restoreGeometry(geom)
+        mid_state = self.settings.value("mid_splitter_state")
+        if mid_state:
+            self.mid_splitter.restoreState(mid_state)
+        files_state = self.settings.value("files_v_splitter_state")
+        if files_state:
+            self.files_v_splitter.restoreState(files_state)
 
     def _setup_file_list(self, list_widget):
         """Helper to initialize file list settings and connections."""
@@ -624,6 +664,14 @@ class MainWindow(QWidget):
                 except Exception as e:
                     self.monitor.appendPlainText(f"Error loading saved reference file: {e}")
 
+            # --- Load Snippets ---
+            self.snippets_list.clear()
+            for snip in data.get("snippets", []):
+                item = QListWidgetItem(snip.get("name", ""))
+                item.setData(Qt.UserRole, snip.get("code", ""))
+                item.setToolTip(snip.get("code", ""))
+                self.snippets_list.addItem(item)
+
             self.monitor.appendPlainText(f"Successfully applied settings from profile: {profile_name}")
         except Exception as e:
             self.monitor.appendPlainText(f"Error applying profile settings for '{profile_name}': {e}")
@@ -643,6 +691,15 @@ class MainWindow(QWidget):
         
         file_paths = self._get_all_file_paths()
 
+        # Collect snippets
+        snippets_list = []
+        for i in range(self.snippets_list.count()):
+            item = self.snippets_list.item(i)
+            snippets_list.append({
+                "name": item.text(),
+                "code": item.data(Qt.UserRole)
+            })
+
         try:
             baud_text = self.baud_combo.currentText()
             baud_val = int(baud_text) if baud_text.isdigit() else 115200
@@ -658,6 +715,7 @@ class MainWindow(QWidget):
             "pacing": self.pacing_slider.value(),
             "ignore_chars": getattr(self, "ignoreChars", 0),
             "files": file_paths,
+            "snippets": snippets_list,
             "editor_file": self.editor_fullpath,
             "reference_file": self.reference_fullpath,
             "groups": getattr(self, "module_groups", {})
@@ -695,6 +753,7 @@ class MainWindow(QWidget):
         # Clear UI components
         self.code_file_list.clear()
         self.doc_file_list.clear()
+        self.snippets_list.clear()
         self.editor_text_edit.clear()
         self.scratchpad_text_edit.clear()
         self.reference_text_edit.clear()
@@ -1135,3 +1194,59 @@ class MainWindow(QWidget):
                 self.tab_widget.setCurrentIndex(1)  # Switch to Reference tab (index 1)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not load reference: {e}")
+
+    def on_add_snippet(self):
+        """Adds selected text from editor to the snippets list."""
+        cursor = self.editor_text_edit.textCursor()
+        if not cursor.hasSelection():
+            return
+            
+        # selectedText uses unicode paragraph separator \u2029 for newlines
+        text = cursor.selectedText().replace('\u2029', '\n')
+        if text.strip():
+            # Create a display name: first line or truncated first line
+            lines = text.splitlines()
+            display_name = lines[0].strip() if lines else text
+            if len(display_name) > 50:
+                display_name = display_name[:47] + "..."
+            
+            item = QListWidgetItem(display_name)
+            item.setData(Qt.UserRole, text) # Store full multiline text
+            item.setToolTip(text)
+            self.snippets_list.addItem(item)
+            self.monitor.appendPlainText(f"Snippet added to library: {display_name}")
+
+    def on_snippet_double_clicked(self, item):
+        """Inserts the snippet text at the current cursor position in the editor."""
+        text = item.data(Qt.UserRole)
+        if text:
+            self.editor_text_edit.textCursor().insertText(text)
+            self.editor_text_edit.setFocus()
+
+    def show_snippet_context_menu(self, pos):
+        """Displays a right-click menu to manage snippets."""
+        item = self.snippets_list.itemAt(pos)
+        if not item:
+            return
+
+        menu = QMenu(self)
+        rename_action = menu.addAction("Rename Snippet")
+        delete_action = menu.addAction("Delete Snippet")
+        
+        action = menu.exec_(self.snippets_list.viewport().mapToGlobal(pos))
+        
+        if action == rename_action:
+            new_name, ok = QInputDialog.getText(
+                self, "Rename Snippet", "Enter new name:", text=item.text()
+            )
+            if ok and new_name:
+                item.setText(new_name)
+        elif action == delete_action:
+            self.snippets_list.takeItem(self.snippets_list.row(item))
+
+    def closeEvent(self, event):
+        """Save window geometry and splitter states on exit."""
+        self.settings.setValue("geometry", self.saveGeometry())
+        self.settings.setValue("mid_splitter_state", self.mid_splitter.saveState())
+        self.settings.setValue("files_v_splitter_state", self.files_v_splitter.saveState())
+        super().closeEvent(event)

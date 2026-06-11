@@ -14,6 +14,12 @@
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/epub/zeptoforth.epub",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Pipico_BME280_RandomNerds.py.txt"
     ],
+    "snippets": [
+        {
+            "name": "i2c-target-addr!",
+            "code": "i2c-target-addr!"
+        }
+    ],
     "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.f",
     "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/UploadFolder/AA-Zeptoforth_I2C_Oled_v1.fs",
     "groups": {
