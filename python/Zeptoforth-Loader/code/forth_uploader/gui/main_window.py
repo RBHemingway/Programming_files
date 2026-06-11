@@ -129,11 +129,18 @@ class ForthHighlighter(QSyntaxHighlighter):
         super().__init__(document)
         self.first_occurrence_format = QTextCharFormat()
         self.first_occurrence_format.setBackground(QColor("#ADD8E6"))  # Light Blue
+        self.comment_format = QTextCharFormat()
+        self.comment_format.setBackground(QColor("#E0E0E0"))  # Light gray background
 
     def highlightBlock(self, text):
         # 1. Ignore everything after a backslash (Forth-style comment)
         comment_idx = text.find('\\')
-        text_to_process = text[:comment_idx] if comment_idx != -1 else text
+        if comment_idx != -1:
+            # Highlight the comment part (from backslash to end of line)
+            self.setFormat(comment_idx, len(text) - comment_idx, self.comment_format)
+            text_to_process = text[:comment_idx]
+        else:
+            text_to_process = text
 
         doc_text = self.document().toPlainText()
         block_pos = self.currentBlock().position()
@@ -397,6 +404,8 @@ class MainWindow(QWidget):
 
         # c. Add a second qplaintext to tab control
         self.reference_text_edit = ReferenceTextEdit()
+        self._ref_find_highlights = []
+        self.reference_text_edit.cursorPositionChanged.connect(self.highlight_ref_current_line)
         self.reference_text_edit.setFont(QFont("Consolas", 10))
         self.reference_text_edit.setTabStopDistance(3 * self.reference_text_edit.fontMetrics().width(' '))
         self.reference_text_edit.setStyleSheet("""
@@ -405,6 +414,11 @@ class MainWindow(QWidget):
                 border: 1px solid #000000;
                 padding: 5px;
             }""")
+        self.highlight_ref_current_line()
+
+        self.ref_find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self.reference_text_edit)
+        self.ref_find_shortcut.setContext(Qt.WidgetShortcut)
+        self.ref_find_shortcut.activated.connect(self.on_toggle_ref_find_highlight)
 
         reference_tab_layout = QVBoxLayout()
         reference_tab_layout.addWidget(self.reference_text_edit)
@@ -861,6 +875,7 @@ class MainWindow(QWidget):
         self.reference_fullpath = ""
         self.last_loaded_files = []
         self.selected_profile_name = None
+        self._ref_find_highlights = []
 
         # Reset profile combo and title without triggering signals
         self.profile_combo.blockSignals(True)
@@ -1266,6 +1281,22 @@ class MainWindow(QWidget):
         
         self.monitor.setExtraSelections(extra_selections)
 
+    def highlight_ref_current_line(self):
+        """Highlights the line where the cursor is currently located in the reference edit."""
+        extra_selections = []
+        if not self.reference_text_edit.isReadOnly():
+            selection = QTextEdit.ExtraSelection()
+            line_color = QColor("#E8E8E8") # Light grey highlight
+            selection.format.setBackground(line_color)
+            selection.format.setProperty(QTextFormat.FullWidthSelection, True)
+            selection.cursor = self.reference_text_edit.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+        
+        # Re-apply any existing find highlights
+        extra_selections.extend(self._ref_find_highlights)
+        self.reference_text_edit.setExtraSelections(extra_selections)
+
     def update_definitions_list(self):
         """Update the list of Forth definitions, variables, and constants from the editor."""
         self.definitions_list.clear()
@@ -1373,6 +1404,37 @@ class MainWindow(QWidget):
         self._find_highlights = extra_selections
         self.highlight_current_line()
         self.monitor.appendPlainText(f"Highlighted {len(extra_selections)} occurrences of '{search_text}'.")
+
+    def on_toggle_ref_find_highlight(self):
+        """Highlight all occurrences of selected text in Reference or clear if already highlighted."""
+        if self._ref_find_highlights:
+            self._ref_find_highlights = []
+            self.highlight_ref_current_line()
+            self.monitor.appendPlainText("Reference find highlights cleared.")
+            return
+
+        cursor = self.reference_text_edit.textCursor()
+        search_text = cursor.selectedText()
+        if not search_text:
+            return
+
+        extra_selections = []
+        fmt = QTextCharFormat()
+        fmt.setBackground(QColor("yellow"))
+        fmt.setForeground(QColor("black"))
+
+        doc = self.reference_text_edit.document()
+        find_cursor = doc.find(search_text)
+        while not find_cursor.isNull():
+            selection = QTextEdit.ExtraSelection()
+            selection.format = fmt
+            selection.cursor = find_cursor
+            extra_selections.append(selection)
+            find_cursor = doc.find(search_text, find_cursor)
+
+        self._ref_find_highlights = extra_selections
+        self.highlight_ref_current_line()
+        self.monitor.appendPlainText(f"Highlighted {len(extra_selections)} occurrences of '{search_text}' in Reference.")
 
     def load_into_reference(self, path):
         """Loads a file into the reference text edit and switches to its tab."""
