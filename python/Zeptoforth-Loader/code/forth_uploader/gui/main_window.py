@@ -1,12 +1,13 @@
 import os
 import json
+import re
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QTextEdit, QSplitter, QTabWidget,
     QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut, QInputDialog
 )
-from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat, QTextFormat
+from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat, QTextFormat, QSyntaxHighlighter
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl, QSettings, QTimer
 from serial_manager import SerialManager
@@ -104,6 +105,46 @@ class ReferenceTextEdit(QPlainTextEdit):
                     print(f"Error loading dropped file: {e}")
         else:
             super().dropEvent(event)
+
+class ForthHighlighter(QSyntaxHighlighter):
+    """Highlighter that colors the first occurrence of a word in light blue."""
+    def __init__(self, document):
+        super().__init__(document)
+        self.first_occurrence_format = QTextCharFormat()
+        self.first_occurrence_format.setBackground(QColor("#ADD8E6"))  # Light Blue
+
+    def highlightBlock(self, text):
+        # 1. Ignore everything after a backslash (Forth-style comment)
+        comment_idx = text.find('\\')
+        text_to_process = text[:comment_idx] if comment_idx != -1 else text
+
+        doc_text = self.document().toPlainText()
+        block_pos = self.currentBlock().position()
+
+        # Regex to identify standard numbers (integer or float)
+        num_pattern = re.compile(r'^[-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?$')
+
+        # Find every "word" (sequences of non-whitespace characters)
+        for match in re.finditer(r'\S+', text_to_process):
+            word = match.group()
+
+            # 2. Skip words starting with $
+            if word.startswith('$'):
+                continue
+
+            # 3. Skip words that are numbers (ensure there's at least one digit)
+            if num_pattern.match(word) and any(c.isdigit() for c in word):
+                continue
+
+            start = match.start()
+            word_abs_pos = block_pos + start
+
+            # 4. Highlight if it's the first occurrence in the document above this point
+            preceding_text = doc_text[:word_abs_pos]
+            pattern = r'(?<!\S)' + re.escape(word) + r'(?!\S)'
+
+            if not re.search(pattern, preceding_text):
+                self.setFormat(start, len(word), self.first_occurrence_format)
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -418,6 +459,7 @@ class MainWindow(QWidget):
         self.editor_text_edit.setContextMenuPolicy(Qt.CustomContextMenu)
         self.editor_text_edit.setCursorWidth(3)
         self._find_highlights = []
+        self.editor_highlighter = ForthHighlighter(self.editor_text_edit.document())
         self.editor_text_edit.cursorPositionChanged.connect(self.highlight_current_line)
         self.editor_text_edit.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.editor_text_edit.setStyleSheet("""
