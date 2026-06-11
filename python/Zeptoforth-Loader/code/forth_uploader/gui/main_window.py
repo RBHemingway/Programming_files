@@ -193,12 +193,18 @@ class MainWindow(QWidget):
         # --- a. Monitor Tab (moved from middle) ---
         self.monitor = ForthMonitorTextEdit()
         self.monitor.return_pressed.connect(self.on_monitor_return_pressed)
+        self.monitor.document().modificationChanged.connect(self.on_monitor_modified_changed)
         self.monitor.setFont(QFont("Consolas", 10))
+        self.monitor.cursorPositionChanged.connect(self.highlight_monitor_current_line)
+        self.monitor.setCursorWidth(3)
         self.monitor.setStyleSheet("""
             QPlainTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
+                color: black;
                 border: 1px solid #C0C0C0;
+                padding: 5px;
             }""")
+        self.highlight_monitor_current_line()
 
         monitor_tab_layout = QVBoxLayout()
         monitor_tab_layout.addWidget(self.monitor)
@@ -1158,6 +1164,40 @@ class MainWindow(QWidget):
             self.save_editor_btn.setStyleSheet("background-color: #a15a59; color: white;")
 
             # self.editor_text_edit.setStyleSheet("QPlainTextEdit { background-color: white; }")
+
+    def on_monitor_modified_changed(self, modified):
+        if modified:
+            self.monitor.setStyleSheet("""
+                QPlainTextEdit {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7F70F6, stop:1 #F0FAFF);
+                    color: black;
+                    border: 1px solid #000000;
+                    padding: 5px;
+                }""")
+            self.clear_btn.setStyleSheet("background-color: yellow; color: black;")
+        else:
+            self.monitor.setStyleSheet("""
+                QPlainTextEdit {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
+                    color: black;
+                    border: 1px solid #C0C0C0;
+                    padding: 5px;
+                }""")
+            self.clear_btn.setStyleSheet("background-color: #a15a59; color: white;")
+
+    def highlight_monitor_current_line(self):
+        """Highlights the line where the cursor is currently located in the monitor."""
+        extra_selections = []
+        if not self.monitor.isReadOnly():
+            selection = QTextEdit.ExtraSelection()
+            line_color = QColor("#E8E8E8") # Light grey highlight
+            selection.format.setBackground(line_color)
+            selection.format.setProperty(QTextFormat.FullWidthSelection, True)
+            selection.cursor = self.monitor.textCursor()
+            selection.cursor.clearSelection()
+            extra_selections.append(selection)
+        
+        self.monitor.setExtraSelections(extra_selections)
 
     def update_definitions_list(self):
         """Update the list of Forth definitions, variables, and constants from the editor."""
