@@ -257,7 +257,7 @@ class MainWindow(QWidget):
         self.monitor.setCursorWidth(3)
         self.monitor.setStyleSheet("""
             QPlainTextEdit {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffb699, stop:1 #F0FAFF);
                 color: black;
                 border: 1px solid #C0C0C0;
                 padding: 5px;
@@ -481,7 +481,7 @@ class MainWindow(QWidget):
         self.editor_text_edit.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.editor_text_edit.setStyleSheet("""
             QPlainTextEdit {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E6F0FF, stop:1 #FFFFFF);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffa2f9, stop:1 #FFFFFF);
                 border: 1px solid #C0C0C0;
                 padding: 5px;
             }""")
@@ -1209,7 +1209,7 @@ class MainWindow(QWidget):
             # Light yellow background when modified
             self.editor_text_edit.setStyleSheet("""
             QPlainTextEdit {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7F70F6, stop:1 #FFFFFF);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f6a2f9, stop:1 #FFFFFF);
                 border: 1px solid #000000;
                 padding: 5px;
             }""")
@@ -1232,7 +1232,7 @@ class MainWindow(QWidget):
         if modified:
             self.monitor.setStyleSheet("""
                 QPlainTextEdit {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #7F70F6, stop:1 #F0FAFF);
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffb699, stop:1 #F0FAFF);
                     color: black;
                     border: 1px solid #000000;
                     padding: 5px;
