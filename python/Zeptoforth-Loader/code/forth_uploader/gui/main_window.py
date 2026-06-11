@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QTextEdit, QSplitter, QTabWidget,
     QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut, QInputDialog
 )
-from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat, QTextFormat, QSyntaxHighlighter
+from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat, QTextFormat, QSyntaxHighlighter, QTextCursor
 from .forth_monitor_text_edit import ForthMonitorTextEdit
 from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl, QSettings, QTimer
 from serial_manager import SerialManager
@@ -369,7 +369,7 @@ class MainWindow(QWidget):
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
             }
-            QTabBar::tab:first { background: #8082F7; } /* Monitor Blue */
+            QTabBar::tab:first { background: #ffb699; } /* Monitor Orange */
             QTabBar::tab:last { background: #FFF0E0; }  /* Words Brown */
             QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
         """)
@@ -463,7 +463,7 @@ class MainWindow(QWidget):
         # 3. Right Section: Existing Editor Window
         editor_layout = QVBoxLayout()  # Define the editor_layout here
 
-        self.editor_label = QLabel("File Editor: (ctrl+ / F Q)")
+        self.editor_label = QLabel("File Editor: (ctrl+ / F Q D)")
         self.editor_label.setFont(QFont("Arial", 10, QFont.Bold))
         editor_layout.addWidget(self.editor_label)
         self.editor_fullpath = ""
@@ -499,6 +499,10 @@ class MainWindow(QWidget):
         self.snippet_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self.editor_text_edit)
         self.snippet_shortcut.setContext(Qt.WidgetShortcut)
         self.snippet_shortcut.activated.connect(self.on_add_snippet)
+
+        self.delete_line_shortcut = QShortcut(QKeySequence("Ctrl+D"), self.editor_text_edit)
+        self.delete_line_shortcut.setContext(Qt.WidgetShortcut)
+        self.delete_line_shortcut.activated.connect(self.on_delete_line)
 
         editor_buttons_layout = QHBoxLayout()
         self.load_editor_btn = QPushButton("Load File...")
@@ -1232,7 +1236,7 @@ class MainWindow(QWidget):
         if modified:
             self.monitor.setStyleSheet("""
                 QPlainTextEdit {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffb699, stop:1 #F0FAFF);
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ff8649, stop:1 #F0FAFF);
                     color: black;
                     border: 1px solid #000000;
                     padding: 5px;
@@ -1241,7 +1245,7 @@ class MainWindow(QWidget):
         else:
             self.monitor.setStyleSheet("""
                 QPlainTextEdit {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #8082F7, stop:1 #F0FAFF);
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffb699, stop:1 #F0FAFF);
                     color: black;
                     border: 1px solid #C0C0C0;
                     padding: 5px;
@@ -1328,6 +1332,15 @@ class MainWindow(QWidget):
                 break
             current_block = current_block.next()
             
+        cursor.endEditBlock()
+
+    def on_delete_line(self):
+        """Delete the current line (block) in the editor."""
+        cursor = self.editor_text_edit.textCursor()
+        # Using BlockUnderCursor selects the entire line including the newline character
+        cursor.beginEditBlock()
+        cursor.select(QTextCursor.BlockUnderCursor)
+        cursor.removeSelectedText()
         cursor.endEditBlock()
 
     def on_toggle_find_highlight(self):
