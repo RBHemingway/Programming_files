@@ -96,7 +96,7 @@ class ReferenceTextEdit(QPlainTextEdit):
             event.setDropAction(Qt.CopyAction)
             event.accept()
             file_path = event.mimeData().urls()[0].toLocalFile()
-            if os.path.isfile(file_path) and file_path.lower().endswith((".fs", ".f", ".txt")):
+            if os.path.isfile(file_path) and file_path.lower().endswith((".zf", ".fs", ".f", ".txt")):
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         self.setPlainText(f.read())
@@ -390,7 +390,6 @@ class MainWindow(QWidget):
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
             }
-            QTabBar::tab:nth-last-child(2) { background: #FFF0E0; } /* Words Brown */
             QTabBar::tab:last { background: #E0F0FF; }             /* Snippets Blue */
             QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
         """)
@@ -407,6 +406,8 @@ class MainWindow(QWidget):
         self.editor_text_edit.textChanged.connect(lambda: self.definition_timer.start(500))
         self.editor_text_edit.document().modificationChanged.connect(self.on_editor_modified_changed)
         self.editor_text_edit.setFont(QFont("Consolas", 10))
+        self.editor_text_edit.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.editor_text_edit.customContextMenuRequested.connect(self.show_editor_context_menu)
         self.editor_text_edit.setStyleSheet("""
             QPlainTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #E6F0FF, stop:1 #FFFFFF);
@@ -876,7 +877,7 @@ class MainWindow(QWidget):
             return
 
         # Determine which list to use
-        is_forth = lower_path.endswith((".fs", ".f")) and not lower_path.startswith("http")
+        is_forth = lower_path.endswith((".zf", ".fs", ".f")) and not lower_path.startswith("http")
         target_list = self.code_file_list if is_forth else self.doc_file_list
 
         if lower_path.startswith(("http://", "https://")):
@@ -897,13 +898,13 @@ class MainWindow(QWidget):
             lp = path.lower()
             if lp.startswith(("http://", "https://")):
                 self.add_file_path(path)
-            elif os.path.isfile(path) and lp.endswith((".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
+            elif os.path.isfile(path) and lp.endswith((".zf", ".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
                 self.add_file_path(path)
 
     def load_files(self):
         if os.path.isdir(self.current_folder):
             for f in os.listdir(self.current_folder):
-                if f.lower().endswith((".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
+                if f.lower().endswith((".zf", ".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
                     self.add_file_path(os.path.join(self.current_folder, f))
 
     def on_upload_selected(self):
@@ -923,7 +924,7 @@ class MainWindow(QWidget):
         for item in selected_items:
             path = item.data(Qt.UserRole)
             # Only upload Forth source files
-            if path and path.lower().endswith((".fs", ".f")) and not path.lower().startswith("http"):
+            if path and path.lower().endswith((".zf", ".fs", ".f")) and not path.lower().startswith("http"):
                 self.serial.upload_file(path)
                 QApplication.processEvents()
 
@@ -957,7 +958,7 @@ class MainWindow(QWidget):
         for i in range(self.code_file_list.count()):
             item = self.code_file_list.item(i)
             path = item.data(Qt.UserRole)
-            if path and path.lower().endswith((".fs", ".f")) and not path.lower().startswith("http"):
+            if path and path.lower().endswith((".zf", ".fs", ".f")) and not path.lower().startswith("http"):
                 self.serial.upload_file(path)
                 QApplication.processEvents()
 
@@ -1007,8 +1008,12 @@ class MainWindow(QWidget):
         except Exception as e:
             print("Error loading file:", e)
 
-    def on_saveas_editor_file(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save File", "", "AllFiles (*)")
+    def on_saveas_editor_file(self, initial_path=None):
+        # Use the provided path, the current file path, or fall back to the project folder
+        if not isinstance(initial_path, str):
+            initial_path = self.editor_fullpath if self.editor_fullpath else self.current_folder
+            
+        path, _ = QFileDialog.getSaveFileName(self, "Save File", initial_path, "AllFiles (*)")
         try:
             if path:
                 with open(path, "w", encoding="utf-8") as f:
@@ -1017,6 +1022,8 @@ class MainWindow(QWidget):
                 self.editor_fullpath = path
                 self.setWindowTitle(path)
                 self.editor_text_edit.document().setModified(False)
+                # Immediately add the newly saved file to the project's file list
+                self.add_file_path(path)
                 # if a json file re-load profiles
                 if os.path.splitext(path)[1].lower() == ".json":
                     self.load_profiles()
@@ -1060,6 +1067,33 @@ class MainWindow(QWidget):
             self.reference_fullpath = path
         except Exception as e:
             print("Error loading reference file:", e)
+
+    def show_editor_context_menu(self, pos):
+        """Displays a right-click menu for the editor."""
+        menu = self.editor_text_edit.createStandardContextMenu()
+        menu.addSeparator()
+        add_file_action = menu.addAction("Add New File")
+        add_file_action.triggered.connect(self.on_add_new_file)
+        menu.exec_(self.editor_text_edit.mapToGlobal(pos))
+
+    def on_add_new_file(self):
+        """Saves current file if modified, clears editor, and triggers Save As for a new file."""
+        # Capture the current directory context before clearing the editor path
+        context_dir = os.path.dirname(self.editor_fullpath) if self.editor_fullpath else self.current_folder
+
+        if self.editor_text_edit.document().isModified():
+            if self.editor_fullpath:
+                self.on_save_editor_file()
+            else:
+                # Unsaved scratchpad content needs a path before we clear it
+                self.on_saveas_editor_file()
+                if not self.editor_fullpath: # Abort if user cancelled saving current work
+                    return
+                context_dir = os.path.dirname(self.editor_fullpath)
+
+        self.editor_text_edit.clear()
+        self.editor_fullpath = ""
+        self.on_saveas_editor_file(context_dir)
 
     def on_editor_modified_changed(self, modified):
         if modified:
@@ -1186,7 +1220,7 @@ class MainWindow(QWidget):
     def load_into_reference(self, path):
         """Loads a file into the reference text edit and switches to its tab."""
         try:
-            if path and os.path.exists(path) and path.lower().endswith((".fs", ".f", ".txt")):
+            if path and os.path.exists(path) and path.lower().endswith((".zf", ".fs", ".f", ".txt")):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 self.reference_text_edit.setPlainText(text)
