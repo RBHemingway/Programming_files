@@ -518,6 +518,10 @@ class MainWindow(QWidget):
         self.delete_line_shortcut.setContext(Qt.WidgetShortcut)
         self.delete_line_shortcut.activated.connect(self.on_delete_line)
 
+        self.copy_shortcut = QShortcut(QKeySequence.Copy, self.editor_text_edit)
+        self.copy_shortcut.setContext(Qt.WidgetShortcut)
+        self.copy_shortcut.activated.connect(self.on_copy)
+
         editor_buttons_layout = QHBoxLayout()
         self.load_editor_btn = QPushButton("Load File...")
         self.load_editor_btn.clicked.connect(self.on_load_editor_file)
@@ -532,9 +536,35 @@ class MainWindow(QWidget):
         self.save_editor_btn.installEventFilter(self)
         editor_buttons_layout.addWidget(self.save_editor_btn)
 
+        self.copy_btn = QPushButton("Copy Selection")
+        self.copy_btn.clicked.connect(self.on_copy)
+        editor_buttons_layout.addWidget(self.copy_btn)
+
         editor_layout.addLayout(editor_buttons_layout)
         editor_widget = QWidget()
         editor_widget.setLayout(editor_layout)
+
+        # --- 3rd Tab Control: Main Editor & New Black Scratchpad ---
+        self.tab_widget_right = QTabWidget()
+        self.tab_widget_right.addTab(editor_widget, "Main Editor")
+
+        self.scratchpad_2_text_edit = QPlainTextEdit()
+        self.scratchpad_2_text_edit.setFont(QFont("Consolas", 10))
+        self.scratchpad_2_text_edit.setStyleSheet("QPlainTextEdit { background-color: black; color: white; }")
+
+        scratch2_layout = QVBoxLayout()
+        scratch2_layout.addWidget(self.scratchpad_2_text_edit)
+        scratch2_btns = QHBoxLayout()
+        self.save_scratch2_btn = QPushButton("Save Scratchpad")
+        self.save_scratch2_btn.clicked.connect(self.on_save_scratchpad_2)
+        self.clear_scratch2_btn = QPushButton("Clear Scratchpad")
+        self.clear_scratch2_btn.clicked.connect(self.scratchpad_2_text_edit.clear)
+        scratch2_btns.addWidget(self.save_scratch2_btn)
+        scratch2_btns.addWidget(self.clear_scratch2_btn)
+        scratch2_layout.addLayout(scratch2_btns)
+        scratch2_container = QWidget()
+        scratch2_container.setLayout(scratch2_layout)
+        self.tab_widget_right.addTab(scratch2_container, "Scratchpad")
 
         self.profile_combo = QComboBox()
         self.profile_combo.setMinimumContentsLength(30)
@@ -554,7 +584,7 @@ class MainWindow(QWidget):
         layout.addWidget(self.mid_splitter)  # Add the splitter to the main layout
         self.mid_splitter.addWidget(self.tab_widget_left)
         self.mid_splitter.addWidget(self.tab_widget)  # Add the new tabbed widget as the middle section
-        self.mid_splitter.addWidget(editor_widget)
+        self.mid_splitter.addWidget(self.tab_widget_right)
 
         # Restore UI state (window size, position, and splitter handles)
         geom = self.settings.value("geometry")
@@ -766,6 +796,20 @@ class MainWindow(QWidget):
                     self.setWindowTitle(editor_path)
                 except Exception as e:
                     self.monitor.appendPlainText(f"Error loading saved editor file: {e}")
+
+            # --- Add scratchpad.zf if it exists based on the editor's folder ---
+            # This logic mirrors on_save_scratchpad_2 to find the correct location
+            scratchpad_folder = os.path.dirname(self.editor_fullpath) if self.editor_fullpath else self.current_folder
+            if not scratchpad_folder:
+                scratchpad_folder = os.getcwd()
+            scratchpad_file_path = os.path.join(scratchpad_folder, "scratchpad.zf")
+            if os.path.exists(scratchpad_file_path):
+                self.add_file_path(scratchpad_file_path)
+                try:
+                    with open(scratchpad_file_path, "r", encoding="utf-8") as f:
+                        self.scratchpad_2_text_edit.setPlainText(f.read())
+                except Exception as e:
+                    self.monitor.appendPlainText(f"Error loading scratchpad.zf content: {e}")
 
             ref_path = data.get("reference_file", "")
             if ref_path and os.path.exists(ref_path):
@@ -1325,6 +1369,25 @@ class MainWindow(QWidget):
             self.editor_text_edit.setFocus()
         except Exception:
             pass
+
+    def on_copy(self):
+        """Copy selected text from the editor to the clipboard."""
+        self.editor_text_edit.copy()
+
+    def on_save_scratchpad_2(self):
+        """Saves current scratchpad content as scratchpad.zf in the editor's folder."""
+        content = self.scratchpad_2_text_edit.toPlainText()
+        # Determine the directory: use the editor's file path folder or fallback to current workspace
+        folder = os.path.dirname(self.editor_fullpath) if self.editor_fullpath else self.current_folder
+        if not folder: folder = os.getcwd()
+
+        save_path = os.path.join(folder, "scratchpad.zf")
+        try:
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            self.monitor.appendPlainText(f"Black Scratchpad saved to: {save_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not save scratchpad: {e}")
 
     def on_toggle_comment(self):
         """Toggle Forth-style comments (\\ ) on the selected line(s) in the editor."""
