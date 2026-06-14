@@ -652,7 +652,7 @@ class MainWindow(QWidget):
         scratch2_layout = QVBoxLayout()
         scratch2_layout.addWidget(self.scratchpad_2_text_edit)
         scratch2_btns = QHBoxLayout()
-        self.save_scratch2_btn = QPushButton("Save Scratchpad")
+        self.save_scratch2_btn = QPushButton("Save & Upload")
         self.save_scratch2_btn.clicked.connect(self.on_save_scratchpad_2)
         self.clear_scratch2_btn = QPushButton("Clear Scratchpad")
         self.clear_scratch2_btn.clicked.connect(self.scratchpad_2_text_edit.clear)
@@ -1651,7 +1651,7 @@ class MainWindow(QWidget):
             self.scratchpad_2_text_edit.setFocus()
 
     def on_save_scratchpad_2(self):
-        """Saves current scratchpad content as scratchpad.zf in the editor's folder."""
+        """Saves current scratchpad content as scratchpad.zf and uploads it if connected."""
         content = self.scratchpad_2_text_edit.toPlainText()
         # Determine the directory: use the editor's file path folder or fallback to current workspace
         folder = os.path.dirname(self.editor_fullpath) if self.editor_fullpath else self.current_folder
@@ -1662,6 +1662,17 @@ class MainWindow(QWidget):
             with open(save_path, "w", encoding="utf-8") as f:
                 f.write(content)
             self.monitor.appendPlainText(f"Black Scratchpad saved to: {save_path}")
+
+            # Automatically upload after saving if the serial port is open
+            if self.serial.ser and self.serial.ser.is_open:
+                self.serial.upload_file(save_path)
+                self.monitor.appendPlainText(f"Uploaded: {save_path}")
+                # Switch to Monitor tab and focus
+                self.tab_widget_left.setCurrentIndex(0)
+                self.monitor.setFocus()
+            else:
+                self.monitor.appendPlainText("Serial port not connected. File saved but not uploaded.")
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save scratchpad: {e}")
 
