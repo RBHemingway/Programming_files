@@ -157,12 +157,24 @@ class EditorTextEdit(QPlainTextEdit):
         # Returns the full word containing the cursor
         return line[start:end]
 
+    def insertFromMimeData(self, source):
+        """Override to replace tab characters with spaces when pasting."""
+        if source.hasText():
+            self.insertPlainText(source.text().replace('\t', '   '))
+        else:
+            super().insertFromMimeData(source)
+
     def keyPressEvent(self, event):
         # 1. If completer popup is visible, ignore selection keys so the completer can handle them
         if self._completer and self._completer.popup().isVisible():
             if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Escape):
                 event.ignore()
                 return
+
+        # Replace Tab key with three spaces
+        if event.key() == Qt.Key_Tab:
+            self.insertPlainText("   ")
+            return
 
         # 2. Existing logic for auto-indentation
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
@@ -267,6 +279,7 @@ class MainWindow(QWidget):
         self.files = []
         self.selected_profile_name = None  # To store the actively selected profile
         self.reference_fullpath = ""
+        self.hex_sent_count = 0            # Track progress for Hex Viewer line-by-line sending
         self.last_loaded_files = []        # To track file list changes for auto-saving
 
         # Timer to debounce word list updates for better performance
@@ -649,6 +662,34 @@ class MainWindow(QWidget):
         scratch2_container.setLayout(scratch2_layout)
         self.tab_widget_right.addTab(scratch2_container, "Scratchpad")
 
+        # --- Hex Viewer Tab with Control Buttons ---
+        hex_tab_container = QWidget()
+        hex_tab_layout = QVBoxLayout(hex_tab_container)
+
+        self.hex_viewer_text_edit = QTextEdit()
+        self.hex_viewer_text_edit.setReadOnly(True)
+        self.hex_viewer_text_edit.setFont(QFont("Consolas", 10))
+        self.hex_viewer_text_edit.setStyleSheet("background-color: #FFFFFF; color: black;")
+        hex_tab_layout.addWidget(self.hex_viewer_text_edit)
+
+        hex_btn_layout = QHBoxLayout()
+        self.hex_reset_btn = QPushButton("Reset")
+        self.hex_reset_btn.clicked.connect(self.on_hex_reset)
+        hex_btn_layout.addWidget(self.hex_reset_btn)
+
+        self.hex_first_btn = QPushButton("Send 1st Line")
+        self.hex_first_btn.clicked.connect(self.on_hex_send_first)
+        hex_btn_layout.addWidget(self.hex_first_btn)
+
+        self.hex_next_btn = QPushButton("Send next")
+        self.hex_next_btn.setEnabled(False)
+        self.hex_next_btn.clicked.connect(self.on_hex_send_next)
+        hex_btn_layout.addWidget(self.hex_next_btn)
+
+        hex_tab_layout.addLayout(hex_btn_layout)
+        self.tab_widget_right.addTab(hex_tab_container, "Hex viewer")
+        self.tab_widget_right.currentChanged.connect(self.on_tab_right_changed)
+
         self.profile_combo = QComboBox()
         self.profile_combo.setMinimumContentsLength(30)
         self.profile_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -872,7 +913,7 @@ class MainWindow(QWidget):
             if editor_path and os.path.exists(editor_path):
                 try:
                     with open(editor_path, "r", encoding="utf-8") as f:
-                        content = f.read()
+                        content = f.read().replace('\t', '   ')
                     self.editor_text_edit.setPlainText(content)
                     self.scratchpad_text_edit.setPlainText(content)
                     self.editor_fullpath = editor_path
@@ -1213,7 +1254,7 @@ class MainWindow(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Open File", "", "All Files (*)")
         if path:
             with open(path, "r", encoding="utf-8") as f:
-                text = f.read()
+                text = f.read().replace('\t', '   ')
             self.editor_text_edit.setPlainText(text)
             # and into scratchpad
             self.scratchpad_text_edit.setPlainText(text)
@@ -1247,7 +1288,7 @@ class MainWindow(QWidget):
                     return
 
                 with open(path, "r", encoding="utf-8") as f:
-                    text = f.read()
+                    text = f.read().replace('\t', '   ')
                 self.editor_text_edit.setPlainText(text)
                 # and also into scratchpad
                 self.scratchpad_text_edit.setPlainText(text)
@@ -1455,6 +1496,8 @@ class MainWindow(QWidget):
                 
             self.completer_model.setStringList(sorted(list(all_words)))
 
+        self.update_hex_viewer()
+
         for i, line in enumerate(text.splitlines(), 1):
             stripped = line.strip()
             # Check for ':' at the start or 'variable'/'constant' as standalone words
@@ -1465,6 +1508,91 @@ class MainWindow(QWidget):
                 display_text = f"{i:3} {stripped}"
                 self.definitions_list.addItem(display_text)
                 self.definitions_list_2.addItem(display_text)
+
+    def on_tab_right_changed(self, index):
+        """Update the hex viewer if its tab is selected."""
+        if index == 2: # Hex viewer tab
+            self.update_hex_viewer()
+
+    def on_hex_reset(self):
+        """Reset the sending progress and re-render the hex viewer."""
+        self.hex_sent_count = 0
+        self.hex_next_btn.setEnabled(False)
+        self.hex_first_btn.setEnabled(True)
+        self.update_hex_viewer()
+        self.monitor.appendPlainText("Hex viewer sending reset.")
+
+    def on_hex_send_first(self):
+        """Reset and send the first line."""
+        self.hex_sent_count = 0
+        self.on_hex_send_next()
+        # Enable 'Send next' only if more lines remain; disable 'Send 1st Line'
+        num_lines = len(self.editor_text_edit.toPlainText().splitlines())
+        self.hex_next_btn.setEnabled(self.hex_sent_count < num_lines)
+        self.hex_first_btn.setEnabled(False)
+
+    def on_hex_send_next(self):
+        """Send the next line in the sequence to the serial port."""
+        text = self.editor_text_edit.toPlainText()
+        lines = text.splitlines()
+        if not lines:
+            return
+
+        if self.hex_sent_count < len(lines):
+            line_to_send = lines[self.hex_sent_count]
+            stripped = line_to_send.strip()
+
+            # Skip sending empty lines or lines starting with a backslash comment
+            if stripped and not stripped.startswith('\\'):
+                self.serial.send_line(line_to_send)
+
+            self.hex_sent_count += 1
+            self.update_hex_viewer()
+            if self.hex_sent_count >= len(lines):
+                self.hex_next_btn.setEnabled(False)
+
+    def update_hex_viewer(self):
+        """Update the Hex Viewer tab with a byte-by-byte hex and text representation."""
+        # Performance: skip if not visible
+        if self.tab_widget_right.currentIndex() != 2:
+            return
+
+        text = self.editor_text_edit.toPlainText()
+        if not text:
+            self.hex_viewer_text_edit.clear()
+            return
+
+        # Use HTML to allow highlighting
+        html_lines = ["<div style='font-family: Consolas, monospace; white-space: pre;'>"]
+        
+        # Split text into lines, preserving line endings to show them in hex
+        lines = text.splitlines(keepends=True)
+        for i, line in enumerate(lines):
+            bg_color = "#E0E0E0" if i < self.hex_sent_count else "transparent"
+            hex_row = []
+            txt_row = []
+            for char in line:
+                val = ord(char)
+                h = f"{val:02X}"
+                
+                # Highlight values < 0x20 (Space)
+                if val < 32:
+                    hex_row.append(f"<span style='background-color: #FFFF00; color: #FF0000; font-weight: bold;'>{h}</span> ")
+                else:
+                    hex_row.append(f"{h} ")
+                
+                # Align text row (3 chars per byte to match hex width "XX ")
+                p = char if (32 <= val <= 126) else "."
+                txt_row.append(f" {p} ")
+            
+            html_lines.append(f"<div style='background-color: {bg_color};'>")
+            html_lines.append("".join(hex_row))
+            html_lines.append("".join(txt_row))
+            html_lines.append("</div>")
+            html_lines.append("<br/>") # Spacer between lines
+
+        html_lines.append("</div>")
+        self.hex_viewer_text_edit.setHtml("\n".join(html_lines))
 
     def on_definition_clicked(self, item):
         """Jump to the corresponding line in the editor when a word is clicked."""
