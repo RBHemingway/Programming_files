@@ -1235,6 +1235,17 @@ class MainWindow(QWidget):
 
         try:
             if path and os.path.exists(path):
+                # If the clicked file is the scratchpad, upload it but don't load into editor
+                if os.path.basename(path).lower() == "scratchpad.zf":
+                    if self.serial.ser and self.serial.ser.is_open:
+                        self.serial.upload_file(path)
+                        self.monitor.appendPlainText(f"Uploaded: {path}")
+                        self.tab_widget_left.setCurrentIndex(0)  # Switch to Monitor tab
+                        self.monitor.setFocus()
+                    else:
+                        self.monitor.appendPlainText("Serial port not connected. Connect to upload scratchpad.zf.")
+                    return
+
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 self.editor_text_edit.setPlainText(text)
@@ -1311,6 +1322,8 @@ class MainWindow(QWidget):
         """Displays a right-click menu for the editor."""
         menu = self.editor_text_edit.createStandardContextMenu()
         menu.addSeparator()
+        copy_to_scratch_action = menu.addAction("Copy selection to Scratchpad")
+        copy_to_scratch_action.triggered.connect(self.on_copy_to_scratchpad)
         add_file_action = menu.addAction("Add New File")
         add_file_action.triggered.connect(self.on_add_new_file)
         menu.exec_(self.editor_text_edit.mapToGlobal(pos))
@@ -1469,6 +1482,18 @@ class MainWindow(QWidget):
     def on_copy(self):
         """Copy selected text from the editor to the clipboard."""
         self.editor_text_edit.copy()
+
+    def on_copy_to_scratchpad(self):
+        """Clears the black scratchpad and copies the editor's selected text into it."""
+        cursor = self.editor_text_edit.textCursor()
+        if cursor.hasSelection():
+            # selectedText uses unicode paragraph separator \u2029 for newlines
+            text = cursor.selectedText().replace('\u2029', '\n')
+            self.scratchpad_2_text_edit.setPlainText(text)
+            
+            # Switch to the Scratchpad tab (index 1) and focus it
+            self.tab_widget_right.setCurrentIndex(1)
+            self.scratchpad_2_text_edit.setFocus()
 
     def on_save_scratchpad_2(self):
         """Saves current scratchpad content as scratchpad.zf in the editor's folder."""
