@@ -5,11 +5,11 @@ import re
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem,
     QFileDialog, QComboBox, QLabel, QSlider, QPlainTextEdit, QTextEdit, QSplitter, QTabWidget,
-    QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut, QInputDialog
+    QMessageBox, QMenu, QProgressDialog, QApplication, QShortcut, QInputDialog, QCompleter
 )
 from PyQt5.QtGui import QFont, QColor, QDesktopServices, QKeySequence, QTextCharFormat, QTextFormat, QSyntaxHighlighter, QTextCursor
 from .forth_monitor_text_edit import ForthMonitorTextEdit
-from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl, QSettings, QTimer
+from PyQt5.QtCore import Qt, QEvent, pyqtSignal, QUrl, QSettings, QTimer, QStringListModel
 from serial_manager import SerialManager
 import serial.tools.list_ports
 
@@ -107,8 +107,64 @@ class ReferenceTextEdit(QPlainTextEdit):
             super().dropEvent(event)
 
 class EditorTextEdit(QPlainTextEdit):
-    """Custom QPlainTextEdit that supports auto-indentation."""
+    """Custom QPlainTextEdit that supports auto-indentation and word completion."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._completer = None
+
+    def setCompleter(self, completer):
+        if self._completer:
+            self._completer.activated.disconnect()
+        self._completer = completer
+        if not self._completer:
+            return
+        self._completer.setWidget(self)
+        self._completer.setCompletionMode(QCompleter.PopupCompletion)
+        self._completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self._completer.activated.connect(self.insertCompletion)
+
+    def insertCompletion(self, completion):
+        if self._completer.widget() != self:
+            return
+        tc = self.textCursor()
+        # Custom detection for Forth-like words (including - and _)
+        line = tc.block().text()
+        pos = tc.positionInBlock()
+        start, end = pos, pos
+        while start > 0 and (line[start-1].isalnum() or line[start-1] in "_-"):
+            start -= 1
+        while end < len(line) and (line[end].isalnum() or line[end] in "_-"):
+            end += 1
+
+        # Select the full range of the word for replacement
+        base_pos = tc.block().position()
+        tc.setPosition(base_pos + start)
+        tc.setPosition(base_pos + end, QTextCursor.KeepAnchor)
+        tc.insertText(completion)
+        self.setTextCursor(tc)
+
+    def textUnderCursor(self):
+        tc = self.textCursor()
+        # Custom detection for Forth-like words (including - and _)
+        line = tc.block().text()
+        pos = tc.positionInBlock()
+        start, end = pos, pos
+        while start > 0 and (line[start-1].isalnum() or line[start-1] in "_-"):
+            start -= 1
+        while end < len(line) and (line[end].isalnum() or line[end] in "_-"):
+            end += 1
+        
+        # Returns the full word containing the cursor
+        return line[start:end]
+
     def keyPressEvent(self, event):
+        # 1. If completer popup is visible, ignore selection keys so the completer can handle them
+        if self._completer and self._completer.popup().isVisible():
+            if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Escape):
+                event.ignore()
+                return
+
+        # 2. Existing logic for auto-indentation
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             cursor = self.textCursor()
             line_text = cursor.block().text()
@@ -122,6 +178,25 @@ class EditorTextEdit(QPlainTextEdit):
             self.insertPlainText(indent)
         else:
             super().keyPressEvent(event)
+
+        # 3. Handle Word Completion triggering
+        if not self._completer:
+            return
+
+        # Check if we have at least 4 letters typed
+        completionPrefix = self.textUnderCursor()
+        if len(completionPrefix) < 4:
+            self._completer.popup().hide()
+            return
+
+        # Update the completer prefix and show the popup
+        if completionPrefix != self._completer.completionPrefix():
+            self._completer.setCompletionPrefix(completionPrefix)
+            self._completer.popup().setCurrentIndex(self._completer.completionModel().index(0, 0))
+
+        cr = self.cursorRect()
+        cr.setWidth(self._completer.popup().sizeHintForColumn(0) + self._completer.popup().verticalScrollBar().sizeHint().width())
+        self._completer.complete(cr)
 
 class ForthHighlighter(QSyntaxHighlighter):
     """Highlighter that colors the first occurrence of a word in light blue."""
@@ -202,6 +277,14 @@ class MainWindow(QWidget):
         self.build_ui()
         self.refresh_ports()
         self.load_files()
+
+        # Initialize Word Completion for the Editor
+        self.completer_model = QStringListModel()
+        self.completer = QCompleter(self.completer_model, self)
+        self.completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.completer.setCompletionMode(QCompleter.PopupCompletion)
+        # Apply the completer specifically to the main editor
+        self.editor_text_edit.setCompleter(self.completer)
 
     def build_ui(self):
         layout = QVBoxLayout(self)
@@ -1346,6 +1429,19 @@ class MainWindow(QWidget):
         self.definitions_list.clear()
         self.definitions_list_2.clear()
         text = self.editor_text_edit.toPlainText()
+
+        # Update word list for auto-complete
+        if hasattr(self, 'completer_model'):
+            all_matches = re.findall(r'[\w-]{4,}', text)
+            all_words = set(all_matches)
+            
+            # Exclude the word currently being typed unless it exists elsewhere in the document
+            current_word = self.editor_text_edit.textUnderCursor()
+            if current_word and all_matches.count(current_word) == 1:
+                all_words.discard(current_word)
+                
+            self.completer_model.setStringList(sorted(list(all_words)))
+
         for i, line in enumerate(text.splitlines(), 1):
             stripped = line.strip()
             # Check for ':' at the start or 'variable'/'constant' as standalone words
