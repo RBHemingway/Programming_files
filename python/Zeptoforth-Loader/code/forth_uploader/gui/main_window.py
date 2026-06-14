@@ -652,7 +652,7 @@ class MainWindow(QWidget):
         scratch2_layout = QVBoxLayout()
         scratch2_layout.addWidget(self.scratchpad_2_text_edit)
         scratch2_btns = QHBoxLayout()
-        self.save_scratch2_btn = QPushButton("Save & Upload")
+        self.save_scratch2_btn = QPushButton("Save and Upload")
         self.save_scratch2_btn.clicked.connect(self.on_save_scratchpad_2)
         self.clear_scratch2_btn = QPushButton("Clear Scratchpad")
         self.clear_scratch2_btn.clicked.connect(self.scratchpad_2_text_edit.clear)
@@ -690,6 +690,22 @@ class MainWindow(QWidget):
         hex_tab_layout.addLayout(hex_btn_layout)
         self.tab_widget_right.addTab(hex_tab_container, "Hex viewer")
         self.tab_widget_right.currentChanged.connect(self.on_tab_right_changed)
+
+        # Set tab background colors via stylesheet for the right-hand tab widget
+        self.tab_widget_right.setStyleSheet("""
+            QTabBar::tab {
+                color: black;
+                padding: 6px 15px;
+                min-width: 100px;
+                background: #E0E0E0; /* Default (Middle): Scratchpad Light Gray */
+                border: 1px solid #C0C0C0;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:first { background: #FFE0FF; } /* Editor Pale Pink */
+            QTabBar::tab:last { background: #E0FFE0; }  /* Hex Viewer Pale Green */
+            QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
+        """)
 
         self.profile_combo = QComboBox()
         self.profile_combo.setMinimumContentsLength(30)
@@ -1080,7 +1096,12 @@ class MainWindow(QWidget):
         ord_numbers = [ord(char) for char in text]
         print(f"\nReceived ords: {ord_numbers}")
 
-        self.monitor.appendPlainText(text)
+        # Ensure text is inserted at the end of the monitor
+        cursor = self.monitor.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        self.monitor.setTextCursor(cursor)
+        self.monitor.insertPlainText(text)
+        self.monitor.ensureCursorVisible()
 
         # --- UI actions ---
 
@@ -1521,7 +1542,8 @@ class MainWindow(QWidget):
         self.hex_next_btn.setEnabled(False)
         self.hex_first_btn.setEnabled(True)
         self.update_hex_viewer()
-        self.monitor.appendPlainText("Hex viewer sending reset.")
+        # self.monitor.appendPlainText("Hex viewer sending reset.")
+        # self.monitor.appendPlainText("ici\n")
 
     def on_hex_send_first(self):
         """Reset and send the first line."""
