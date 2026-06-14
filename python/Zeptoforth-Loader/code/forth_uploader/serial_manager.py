@@ -63,6 +63,13 @@ class SerialManager(QObject):
     def send_line(self, line):
         if not self.ser or not self.ser.is_open:
             return
+
+        # Ignore anything from the first backslash or '(' to the end of the line
+        indices = [i for i in [line.find('\\'), line.find('(')] if i != -1]
+        if indices:
+            comment_idx = min(indices)
+            line = line[:comment_idx]
+
         self.ser.write(line.encode('utf-8') + b'\n')
         self.ser.flush()
         time.sleep(self.pacing_ms / 1000.0)

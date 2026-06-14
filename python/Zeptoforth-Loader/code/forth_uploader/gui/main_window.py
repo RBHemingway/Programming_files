@@ -220,10 +220,11 @@ class ForthHighlighter(QSyntaxHighlighter):
         self.comment_format.setBackground(QColor("#E0E0E0"))  # Light gray background
 
     def highlightBlock(self, text):
-        # 1. Ignore everything after a backslash (Forth-style comment)
-        comment_idx = text.find('\\')
-        if comment_idx != -1:
-            # Highlight the comment part (from backslash to end of line)
+        # 1. Ignore everything after a backslash or '(' (Forth-style comment)
+        indices = [i for i in [text.find('\\'), text.find('(')] if i != -1]
+        if indices:
+            comment_idx = min(indices)
+            # Highlight the comment part (from first marker to end of line)
             self.setFormat(comment_idx, len(text) - comment_idx, self.comment_format)
             text_to_process = text[:comment_idx]
         else:
@@ -669,7 +670,7 @@ class MainWindow(QWidget):
         self.hex_viewer_text_edit = QTextEdit()
         self.hex_viewer_text_edit.setReadOnly(True)
         self.hex_viewer_text_edit.setFont(QFont("Consolas", 10))
-        self.hex_viewer_text_edit.setStyleSheet("background-color: #FFFFFF; color: black;")
+        self.hex_viewer_text_edit.setStyleSheet("background-color: #E0FFE0; color: black;")
         hex_tab_layout.addWidget(self.hex_viewer_text_edit)
 
         hex_btn_layout = QHBoxLayout()
@@ -1545,11 +1546,16 @@ class MainWindow(QWidget):
             self.hex_sent_count += 1
 
             # If it's a valid line (not empty and not a comment), send it and stop skipping
-            if stripped and not stripped.startswith('\\'):
+            if stripped and not (stripped.startswith('\\') or stripped.startswith('(')):
                 self.serial.send_line(line_to_send)
                 break
 
         self.update_hex_viewer()
+        if self.hex_sent_count > 0:
+            # Delay centering slightly to ensure the layout engine has processed the new HTML
+            line_to_focus = self.hex_sent_count - 1
+            QTimer.singleShot(10, lambda: self.center_hex_viewer(line_to_focus))
+
         if self.hex_sent_count >= len(lines):
             self.hex_next_btn.setEnabled(False)
 
@@ -1587,14 +1593,33 @@ class MainWindow(QWidget):
                 p = char if (32 <= val <= 126) else "."
                 txt_row.append(f" {p} ")
             
-            html_lines.append(f"<div style='background-color: {bg_color};'>")
-            html_lines.append("".join(hex_row))
-            html_lines.append("".join(txt_row))
-            html_lines.append("</div>")
-            html_lines.append("<br/>") # Spacer between lines
+            # Combine hex and text rows into a single div with minimal vertical spacing
+            line_block = f"<div style='background-color: {bg_color}; margin-bottom: 2px;'>"
+            line_block += "".join(hex_row) + "\n"
+            line_block += "".join(txt_row)
+            line_block += "</div>"
+            html_lines.append(line_block)
 
         html_lines.append("</div>")
-        self.hex_viewer_text_edit.setHtml("\n".join(html_lines))
+        self.hex_viewer_text_edit.setHtml("".join(html_lines))
+
+    def center_hex_viewer(self, line_idx):
+        """Scrolls the hex viewer so that the specified source line is centered in the viewport."""
+        doc = self.hex_viewer_text_edit.document()
+        layout = doc.documentLayout()
+        vbar = self.hex_viewer_text_edit.verticalScrollBar()
+
+        # Each source line in our HTML construction creates two text blocks (hex row and text row)
+        # due to the \n inside the white-space:pre div.
+        block = doc.findBlockByNumber(line_idx * 2)
+        
+        if block.isValid():
+            # Get the y-coordinate of the block relative to the document
+            rect = layout.blockBoundingRect(block)
+            # Calculate the vertical center of the viewport
+            viewport_center = vbar.pageStep() / 2
+            # Set the scrollbar to position the "seam" between hex and text rows at the center
+            vbar.setValue(int(rect.top() + rect.height() - viewport_center))
 
     def on_definition_clicked(self, item):
         """Jump to the corresponding line in the editor when a word is clicked."""
