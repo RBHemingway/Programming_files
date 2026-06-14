@@ -1538,18 +1538,20 @@ class MainWindow(QWidget):
         if not lines:
             return
 
-        if self.hex_sent_count < len(lines):
+        while self.hex_sent_count < len(lines):
             line_to_send = lines[self.hex_sent_count]
             stripped = line_to_send.strip()
 
-            # Skip sending empty lines or lines starting with a backslash comment
+            self.hex_sent_count += 1
+
+            # If it's a valid line (not empty and not a comment), send it and stop skipping
             if stripped and not stripped.startswith('\\'):
                 self.serial.send_line(line_to_send)
+                break
 
-            self.hex_sent_count += 1
-            self.update_hex_viewer()
-            if self.hex_sent_count >= len(lines):
-                self.hex_next_btn.setEnabled(False)
+        self.update_hex_viewer()
+        if self.hex_sent_count >= len(lines):
+            self.hex_next_btn.setEnabled(False)
 
     def update_hex_viewer(self):
         """Update the Hex Viewer tab with a byte-by-byte hex and text representation."""
