@@ -1,12 +1,29 @@
 {
-  "name": "Default Dev",
-  "folder": ".",
-  "port": "COM0",
-  "baud": 115200,
-  "pacing": 10,
-  "groups": {
-    "core": ["core.fs", "math.fs"],
-    "drivers": ["gpio.fs", "spi.fs"],
-    "wifi": ["wifi.fs", "mqtt.fs"]
-  }
+    "port": "COM0",
+    "baud": 115200,
+    "data_bits": 8,
+    "parity": "None",
+    "stop_bits": 1.0,
+    "pacing": 10,
+    "ignore_chars": 0,
+    "files": [
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280\\scratchpad.zf"
+    ],
+    "snippets": [],
+    "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C_BME280.zf",
+    "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.zf",
+    "groups": {
+        "core": [
+            "core.fs",
+            "math.fs"
+        ],
+        "drivers": [
+            "gpio.fs",
+            "spi.fs"
+        ],
+        "wifi": [
+            "wifi.fs",
+            "mqtt.fs"
+        ]
+    }
 }

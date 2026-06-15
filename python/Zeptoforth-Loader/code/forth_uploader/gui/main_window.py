@@ -1,3 +1,5 @@
+# efad0ca
+
 import os
 import json
 import re
@@ -261,6 +263,7 @@ class ForthHighlighter(QSyntaxHighlighter):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        print("efad0ca: Initializing MainWindow")
         self.setWindowTitle("PyQt5 Forth Uploader for zeptoforth")
         self.resize(1600, 1000)
         self.setStyleSheet("background-color: #A0A0A0;")  # Medium grey background for the main window
