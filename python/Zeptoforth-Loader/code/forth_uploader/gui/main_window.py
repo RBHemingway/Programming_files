@@ -166,7 +166,18 @@ class EditorTextEdit(QPlainTextEdit):
         else:
             super().insertFromMimeData(source)
 
+    def focusInEvent(self, event):
+        """Ensure the shared completer is anchored to this widget upon gaining focus."""
+        if self._completer:
+            self._completer.setWidget(self)
+        super().focusInEvent(event)
+
     def keyPressEvent(self, event):
+        # Ensure the shared completer instance is associated with this specific editor
+        # before checking visibility or triggering completion logic.
+        if self._completer and self._completer.widget() != self:
+            self._completer.setWidget(self)
+
         # 1. If completer popup is visible, ignore selection keys so the completer can handle them
         if self._completer and self._completer.popup().isVisible():
             if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Escape):
