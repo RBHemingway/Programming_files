@@ -70,13 +70,13 @@ class SerialManager(QObject):
             comment_idx = min(indices)
             line = line[:comment_idx]
 
-        self.ser.write(line.encode('utf-8') + b'\n')
+        self.ser.write(line.encode('utf-8') + b'\r')
         self.ser.flush()
         time.sleep(self.pacing_ms / 1000.0)
 
     def upload_file(self, path):
         with open(path, 'r', encoding='utf-8') as f:
             for line in f:
-                line = line.strip()
-                if line:
-                    self.send_line(line)
+                stripped = line.strip()
+                if stripped and not (stripped.startswith('\\') or stripped.startswith('(')):
+                    self.send_line(stripped)
