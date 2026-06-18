@@ -1,0 +1,45 @@
+{
+    "port": "COM7",
+    "baud": 115200,
+    "data_bits": 8,
+    "parity": "None",
+    "stop_bits": 1.0,
+    "pacing": 10,
+    "ignore_chars": 0,
+    "files": [
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.zf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Zeptoforth_I2C_Oled_BME280.zf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED/UploadFolder/AA-Zeptoforth_I2C_Oled_v1.fs",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C_BME280.zf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280\\scratchpad.zf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C_BME280_AsClass.zf",
+        "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Sensors_files/pdfs\\bme280.pdf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/epub/zeptoforth.epub",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Pipico_BME280_RandomNerds.py.txt",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/html/index.html",
+        "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Sensors_files/documents/piicondev_bme280_rp_pico_example.docx",
+        "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Sensors_files/documents/BME280_I2C.docx"
+    ],
+    "snippets": [
+        {
+            "name": "i2c-target-addr!",
+            "code": "i2c-target-addr!"
+        }
+    ],
+    "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C_BME280_AsClass.zf",
+    "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C_BME280.zf",
+    "groups": {
+        "core": [
+            "core.fs",
+            "math.fs"
+        ],
+        "drivers": [
+            "gpio.fs",
+            "spi.fs"
+        ],
+        "wifi": [
+            "wifi.fs",
+            "mqtt.fs"
+        ]
+    }
+}

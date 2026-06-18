@@ -15,10 +15,26 @@ class ForthMonitorTextEdit(QPlainTextEdit):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            # Get the text of the current block (line) before the newline is inserted
             cursor = self.textCursor()
+
+            # If Shift is NOT held, append " .s" to the end of the current line
+            if not (event.modifiers() & Qt.ShiftModifier):
+                cursor.movePosition(cursor.EndOfBlock)
+                cursor.insertText(" .s")
+                self.setTextCursor(cursor)
+
+            # Get the text of the current block (line) before the newline is inserted
             cursor.movePosition(cursor.StartOfBlock)
             cursor.movePosition(cursor.EndOfBlock, cursor.KeepAnchor)
             line_text = cursor.selectedText()
             self.return_pressed.emit(line_text)
+
+        elif event.key() == Qt.Key_Escape:
+            # Select the entire current line and delete it
+            cursor = self.textCursor()
+            cursor.movePosition(cursor.StartOfBlock)
+            cursor.movePosition(cursor.EndOfBlock, cursor.KeepAnchor)
+            cursor.removeSelectedText()
+            return # Skip the base class implementation for Escape
+
         super().keyPressEvent(event) # Always call the base class implementation

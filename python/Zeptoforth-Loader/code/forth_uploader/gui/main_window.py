@@ -395,6 +395,10 @@ class MainWindow(QWidget):
         self.new_profile_btn.clicked.connect(self.on_new_profile)
         monitor_btn_layout.addWidget(self.new_profile_btn)
 
+        self.monitor_upload_btn = QPushButton("Upload Editor")
+        self.monitor_upload_btn.clicked.connect(self.on_monitor_upload_editor)
+        monitor_btn_layout.addWidget(self.monitor_upload_btn)
+
         monitor_tab_layout.addLayout(monitor_btn_layout)
         monitor_tab_widget = QWidget()
         monitor_tab_widget.setLayout(monitor_tab_layout)
@@ -1253,6 +1257,24 @@ class MainWindow(QWidget):
         progress.close()
         self.tab_widget_left.setCurrentIndex(0)
         self.monitor.setFocus()
+
+    def on_monitor_upload_editor(self):
+        """Sends 'ici' and then uploads the file currently loaded in the editor."""
+        if not self.serial.ser or not self.serial.ser.is_open:
+            self.monitor.appendPlainText("Error: Serial port not connected.")
+            return
+
+        if not self.editor_fullpath or not os.path.exists(self.editor_fullpath):
+            self.monitor.appendPlainText("Error: No file loaded in the editor.")
+            return
+
+        self.setCursor(Qt.WaitCursor)
+        try:
+            self.serial.send_line("ici")
+            self.serial.upload_file(self.editor_fullpath)
+            self.monitor.appendPlainText(f"Sent 'ici' and uploaded editor file: {os.path.basename(self.editor_fullpath)}")
+        finally:
+            self.setCursor(Qt.ArrowCursor)
 
     def on_monitor_return_pressed(self, line_to_send):
         ord_numbers = [ord(char) for char in line_to_send]
