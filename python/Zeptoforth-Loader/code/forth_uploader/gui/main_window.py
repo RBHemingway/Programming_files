@@ -1129,7 +1129,8 @@ class MainWindow(QWidget):
         if self._connection_init_pending and " ok" in text:
             self._connection_init_pending = False
             # Send 'ici' (or your preferred cmd) after a brief delay
-            QTimer.singleShot(200, lambda: self.serial.send_line("cornerstone ici"))
+            startline = ": clrStk depth 0 ?do drop loop ; \n\r  cornerstone ici"
+            QTimer.singleShot(200, lambda: self.serial.send_line(startline))
 
         # --- UI actions ---
 
