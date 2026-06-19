@@ -99,7 +99,7 @@ class ReferenceTextEdit(QPlainTextEdit):
             event.setDropAction(Qt.CopyAction)
             event.accept()
             file_path = event.mimeData().urls()[0].toLocalFile()
-            if os.path.isfile(file_path) and file_path.lower().endswith((".zf", ".fs", ".f", ".txt")):
+            if os.path.isfile(file_path) and file_path.lower().endswith((".zf", ".fs", ".f", ".txt", ".md")):
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         self.setPlainText(f.read())
@@ -296,6 +296,7 @@ class MainWindow(QWidget):
         self.reference_fullpath = ""
         self.hex_sent_count = 0            # Track progress for Hex Viewer line-by-line sending
         self.last_loaded_files = []        # To track file list changes for auto-saving
+        self._connection_init_pending = False # Track if we are waiting for the welcome message
 
         # Timer to debounce word list updates for better performance
         self.definition_timer = QTimer()
@@ -1124,6 +1125,12 @@ class MainWindow(QWidget):
         self.monitor.insertPlainText(text)
         self.monitor.ensureCursorVisible()
 
+        # If we just connected, wait for the ' ok' prompt before sending the init command
+        if self._connection_init_pending and " ok" in text:
+            self._connection_init_pending = False
+            # Send 'ici' (or your preferred cmd) after a brief delay
+            QTimer.singleShot(200, lambda: self.serial.send_line("cornerstone ici"))
+
         # --- UI actions ---
 
     def refresh_ports(self):
@@ -1168,12 +1175,14 @@ class MainWindow(QWidget):
                 self.monitor.appendPlainText(
                     f"Connected to {port} @ {baud} bps, {data_bits} data bits, {parity_str} parity, {stop_bits_str} stop bits.")
                 self.connect_btn.setText("Disconnect")
+                self._connection_init_pending = True
             except Exception as e:
                 self.monitor.appendPlainText(f"Error connecting: {e}")
                 if self.serial.ser and self.serial.ser.is_open:
                     self.serial.close()
                 self.connect_btn.setText("Connect")
         else:
+            self._connection_init_pending = False
             self.serial.close()
             self.monitor.clear()
             self.monitor.appendPlainText("Disconnected.")
@@ -1221,13 +1230,13 @@ class MainWindow(QWidget):
             lp = path.lower()
             if lp.startswith(("http://", "https://")):
                 self.add_file_path(path)
-            elif os.path.isfile(path) and lp.endswith((".zf", ".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
+            elif os.path.isfile(path) and lp.endswith((".zf", ".fs", ".f", ".txt", ".md", ".docx", ".pdf", ".html", ".epub")):
                 self.add_file_path(path)
 
     def load_files(self):
         if os.path.isdir(self.current_folder):
             for f in os.listdir(self.current_folder):
-                if f.lower().endswith((".zf", ".fs", ".f", ".txt", ".docx", ".pdf", ".html", ".epub")):
+                if f.lower().endswith((".zf", ".fs", ".f", ".txt", ".md", ".docx", ".pdf", ".html", ".epub")):
                     self.add_file_path(os.path.join(self.current_folder, f))
 
     def on_upload_selected(self):
@@ -1329,7 +1338,7 @@ class MainWindow(QWidget):
         lower_path = path.lower()
         # If it's a URL or a binary document, open with system default
         # Added .txt, .html, and .epub to external open list per user request
-        if lower_path.startswith(("http://", "https://")) or lower_path.endswith((".docx", ".pdf", ".txt", ".html", ".epub")):
+        if lower_path.startswith(("http://", "https://")) or lower_path.endswith((".docx", ".pdf", ".txt", ".md", ".html", ".epub")):
             QDesktopServices.openUrl(QUrl(path) if lower_path.startswith("http") else QUrl.fromLocalFile(path))
             return
 
@@ -1867,7 +1876,7 @@ class MainWindow(QWidget):
     def load_into_reference(self, path):
         """Loads a file into the reference text edit and switches to its tab."""
         try:
-            if path and os.path.exists(path) and path.lower().endswith((".zf", ".fs", ".f", ".txt")):
+            if path and os.path.exists(path) and path.lower().endswith((".zf", ".fs", ".f", ".txt", ".md")):
                 with open(path, "r", encoding="utf-8") as f:
                     text = f.read()
                 self.reference_text_edit.setPlainText(text)
