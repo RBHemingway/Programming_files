@@ -113,6 +113,9 @@ class EditorTextEdit(QPlainTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._completer = None
+        self._completion_hide_timer = QTimer(self)
+        self._completion_hide_timer.setSingleShot(True)
+        self._completion_hide_timer.timeout.connect(self.hideCompletion)
 
     def setCompleter(self, completer):
         if self._completer:
@@ -128,6 +131,7 @@ class EditorTextEdit(QPlainTextEdit):
     def insertCompletion(self, completion):
         if self._completer.widget() != self:
             return
+        self._completion_hide_timer.stop()
         tc = self.textCursor()
         # Custom detection for Forth-like words (including - and _)
         line = tc.block().text()
@@ -144,6 +148,14 @@ class EditorTextEdit(QPlainTextEdit):
         tc.setPosition(base_pos + end, QTextCursor.KeepAnchor)
         tc.insertText(completion)
         self.setTextCursor(tc)
+
+    def hideCompletion(self):
+        if self._completer and self._completer.popup().isVisible():
+            self._completer.popup().hide()
+
+    def restartCompletionHideTimer(self):
+        if self._completer and self._completer.popup().isVisible():
+            self._completion_hide_timer.start(5000)
 
     def textUnderCursor(self):
         tc = self.textCursor()
@@ -178,9 +190,9 @@ class EditorTextEdit(QPlainTextEdit):
         if self._completer and self._completer.widget() != self:
             self._completer.setWidget(self)
 
-        # 1. If completer popup is visible, ignore selection keys so the completer can handle them
+        # 1. If completer popup is visible, ignore selection/navigation keys so the completer can handle them
         if self._completer and self._completer.popup().isVisible():
-            if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Escape):
+            if event.key() in (Qt.Key_Enter, Qt.Key_Return, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Escape, Qt.Key_Up, Qt.Key_Down):
                 event.ignore()
                 return
 
@@ -211,7 +223,8 @@ class EditorTextEdit(QPlainTextEdit):
         # Check if we have at least 4 letters typed
         completionPrefix = self.textUnderCursor()
         if len(completionPrefix) < 4:
-            self._completer.popup().hide()
+            if self._completer.popup().isVisible():
+                self._completion_hide_timer.start(5000)
             return
 
         # Update the completer prefix and show the popup
@@ -222,6 +235,7 @@ class EditorTextEdit(QPlainTextEdit):
         cr = self.cursorRect()
         cr.setWidth(self._completer.popup().sizeHintForColumn(0) + self._completer.popup().verticalScrollBar().sizeHint().width())
         self._completer.complete(cr)
+        self._completion_hide_timer.start(5000)
 
 class ForthHighlighter(QSyntaxHighlighter):
     """Highlighter that colors the first occurrence of a word in light blue."""
@@ -1117,6 +1131,14 @@ class MainWindow(QWidget):
         # Debugging: print all ordinal numbers in the received text
         ord_numbers = [ord(char) for char in text]
         print(f"\nReceived ords: {ord_numbers}")
+
+        # Check if text ends with [32, 111, 107, 13, 10, 6] (" ok\r\n\x06")
+        # If not, append it to the received data
+        expected_ending = " ok\r\n\x06"
+        if not text.endswith(expected_ending):
+            text = text + expected_ending
+            modified_ords = [ord(char) for char in text]
+            print(f"Modified ords: {modified_ords}")
 
         # Ensure text is inserted at the end of the monitor
         cursor = self.monitor.textCursor()

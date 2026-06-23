@@ -16,6 +16,8 @@
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/Classes/I2C_AsClass.zf",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/Zeptoforth-MD-Files\\OO-md.zf",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/Classes\\scratchpad.zf",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/extra/common/zeptoed.fs",
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/Testing/Testing-I2C-Scan.zf",
         "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Sensors_files/pdfs\\bme280.pdf",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/epub/zeptoforth.epub",
         "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/Pipico_BME280_RandomNerds.py.txt",
@@ -39,7 +41,7 @@
         }
     ],
     "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/Classes/I2C_AsClass.zf",
-    "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/Zeptoforth-MD-Files\\OO-md.zf",
+    "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/zeptoforth-master/extra/common/zeptoed.fs",
     "groups": {
         "core": [
             "core.fs",
