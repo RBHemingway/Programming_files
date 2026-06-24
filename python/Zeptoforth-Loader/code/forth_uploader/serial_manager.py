@@ -4,7 +4,7 @@ import time
 from PyQt5.QtCore import QObject, pyqtSignal
 
 class SerialManager(QObject):
-    received = pyqtSignal(str)
+    received = pyqtSignal(bytes)
 
     def __init__(self):
         super().__init__()
@@ -56,7 +56,7 @@ class SerialManager(QObject):
             try:
                 data = self.ser.read(1024)
                 if data:
-                    self.received.emit(data.decode(errors='ignore'))
+                    self.received.emit(data)
             except:
                 break
 

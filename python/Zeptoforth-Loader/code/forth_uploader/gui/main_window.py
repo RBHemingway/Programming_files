@@ -327,6 +327,7 @@ class MainWindow(QWidget):
         self.selected_profile_name = None  # To store the actively selected profile
         self.reference_fullpath = ""
         self.hex_sent_count = 0            # Track progress for Hex Viewer line-by-line sending
+        self.raw_received_data = bytearray()  # Store actual received bytes for RX dump
         self.last_loaded_files = []        # To track file list changes for auto-saving
         self._connection_init_pending = False # Track if we are waiting for the welcome message
         self.completion_enabled = True
@@ -749,6 +750,25 @@ class MainWindow(QWidget):
 
         hex_tab_layout.addLayout(hex_btn_layout)
         self.tab_widget_right.addTab(hex_tab_container, "Hex viewer")
+
+        # --- Received Dump Tab ---
+        rx_dump_container = QWidget()
+        rx_dump_layout = QVBoxLayout(rx_dump_container)
+
+        self.rx_dump_text_edit = QTextEdit()
+        self.rx_dump_text_edit.setReadOnly(True)
+        self.rx_dump_text_edit.setFont(QFont("Consolas", 10))
+        self.rx_dump_text_edit.setStyleSheet("QTextEdit { background-color: black; color: white; }")
+        self.rx_dump_text_edit.setLineWrapMode(QTextEdit.NoWrap)
+        rx_dump_layout.addWidget(self.rx_dump_text_edit)
+
+        rx_dump_btn_layout = QHBoxLayout()
+        self.rx_dump_clear_btn = QPushButton("Clear Dump")
+        self.rx_dump_clear_btn.clicked.connect(self.on_rx_dump_clear)
+        rx_dump_btn_layout.addWidget(self.rx_dump_clear_btn)
+        rx_dump_layout.addLayout(rx_dump_btn_layout)
+
+        self.tab_widget_right.addTab(rx_dump_container, "RX Dump")
         self.tab_widget_right.currentChanged.connect(self.on_tab_right_changed)
 
         # Set tab background colors via stylesheet for the right-hand tab widget
@@ -763,7 +783,8 @@ class MainWindow(QWidget):
                 border-top-right-radius: 4px;
             }
             QTabBar::tab:first { background: #FFE0FF; } /* Editor Pale Pink */
-            QTabBar::tab:last { background: #E0FFE0; }  /* Hex Viewer Pale Green */
+            QTabBar::tab:nth-last-of-type(2) { background: #E0FFE0; }  /* Hex Viewer Pale Green */
+            QTabBar::tab:last { background: #000000; color: white; } /* RX Dump Black */
             QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
         """)
 
@@ -1150,16 +1171,25 @@ class MainWindow(QWidget):
         # self.editor_text_edit.appendPlainText(f"--- End Preview of {profile_name} ---")
 
     # --- Serial callbacks ---
-    def on_serial_rx(self, text):
-        # Debugging: print all ordinal numbers in the received text
-        ord_numbers = [ord(char) for char in text]
-        print(f"\nReceived ords: {ord_numbers}")
+    def on_serial_rx(self, data):
+        if not isinstance(data, (bytes, bytearray)):
+            data = bytes(str(data), "utf-8", errors="ignore")
+
+        self.raw_received_data.extend(data)
+
+        # Decode for monitor display using ignore for invalid bytes
+        text = data.decode("utf-8", errors="ignore")
+
+        # Debugging: print all ordinal numbers in the received bytes
+        ord_numbers = list(data)
+        print(f"Received ords: {ord_numbers}")
 
         # Check if text ends with [32, 111, 107, 13, 10, 6] (" ok\r\n\x06")
-        # If not, append it to the received data
-        expected_ending = " ok\r\n\x06"
-        if not text.endswith(expected_ending):
-            text = text + expected_ending
+        # If not, append it to the received data for display only
+        expected_ending = b" ok\r\n\x06"
+        if not data.endswith(expected_ending):
+            decoded_end = expected_ending.decode("utf-8", errors="ignore")
+            text = text + decoded_end
             modified_ords = [ord(char) for char in text]
             print(f"Modified ords: {modified_ords}")
 
@@ -1170,8 +1200,12 @@ class MainWindow(QWidget):
         self.monitor.insertPlainText(text)
         self.monitor.ensureCursorVisible()
 
+        # Refresh the RX dump page only if visible
+        if self.tab_widget_right.currentIndex() == 3:
+            self.update_rx_dump()
+
         # If we just connected, wait for the ' ok' prompt before sending the init command
-        if self._connection_init_pending and " ok" in text:
+        if self._connection_init_pending and b" ok" in data:
             self._connection_init_pending = False
             # Send 'ici' (or your preferred cmd) after a brief delay
             startline = ": clrStk depth 0 ?do drop loop ; \n\r  cornerstone ici"
@@ -1646,6 +1680,47 @@ class MainWindow(QWidget):
         """Update the hex viewer if its tab is selected."""
         if index == 2: # Hex viewer tab
             self.update_hex_viewer()
+        elif index == 3: # RX Dump tab
+            self.update_rx_dump()
+
+    def on_rx_dump_clear(self):
+        """Clear the RX dump buffer and display."""
+        self.raw_received_data.clear()
+        self.rx_dump_text_edit.clear()
+
+    def update_rx_dump(self):
+        """Render the received bytes as hex and ASCII in the RX Dump tab."""
+        if not hasattr(self, 'rx_dump_text_edit'):
+            return
+
+        bytes_per_line = 16
+        lines = []
+        for i in range(0, len(self.raw_received_data), bytes_per_line):
+            chunk = self.raw_received_data[i:i + bytes_per_line]
+            hex_chunks = []
+            ascii_chunks = []
+            for b in chunk:
+                hex_str = f"{b:02X}"
+                if b == 0x06:
+                    hex_chunks.append(f"<span style='background-color: #FF0000; color: white; font-weight: bold;'>{hex_str}</span>")
+                    ascii_chunks.append("<span style='background-color: #FF0000; color: white; font-weight: bold;'>.</span>")
+                else:
+                    hex_chunks.append(hex_str)
+                    ascii_chunks.append(chr(b) if 32 <= b < 127 else ".")
+
+            hex_bytes = " ".join(hex_chunks)
+            ascii_text = "".join(ascii_chunks)
+            hex_cells = f"{hex_bytes:<{bytes_per_line * 3}}"
+            lines.append(f"{hex_cells} |{ascii_text}")
+
+        html = (
+            "<div style='font-family: Consolas, Courier New, monospace; color: white; "
+            "background-color: black; white-space: pre;'>"
+            + "\n".join(lines)
+            + "</div>"
+        )
+        self.rx_dump_text_edit.setHtml(html)
+        self.rx_dump_text_edit.verticalScrollBar().setValue(self.rx_dump_text_edit.verticalScrollBar().maximum())
 
     def on_hex_reset(self):
         """Reset the sending progress and re-render the hex viewer."""
