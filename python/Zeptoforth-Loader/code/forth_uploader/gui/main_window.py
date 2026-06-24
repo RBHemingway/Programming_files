@@ -113,6 +113,7 @@ class EditorTextEdit(QPlainTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._completer = None
+        self._completion_enabled = True
         self._completion_hide_timer = QTimer(self)
         self._completion_hide_timer.setSingleShot(True)
         self._completion_hide_timer.timeout.connect(self.hideCompletion)
@@ -148,6 +149,18 @@ class EditorTextEdit(QPlainTextEdit):
         tc.setPosition(base_pos + end, QTextCursor.KeepAnchor)
         tc.insertText(completion)
         self.setTextCursor(tc)
+
+    def setCompletionEnabled(self, enabled):
+        self._completion_enabled = enabled
+        if not enabled:
+            self.hideCompletion()
+
+    def toggleCompletionEnabled(self):
+        self.setCompletionEnabled(not self._completion_enabled)
+        return self._completion_enabled
+
+    def isCompletionEnabled(self):
+        return self._completion_enabled
 
     def hideCompletion(self):
         if self._completer and self._completer.popup().isVisible():
@@ -215,6 +228,11 @@ class EditorTextEdit(QPlainTextEdit):
             self.insertPlainText(indent)
         else:
             super().keyPressEvent(event)
+
+        if not self._completion_enabled:
+            if self._completer and self._completer.popup().isVisible():
+                self.hideCompletion()
+            return
 
         # 3. Handle Word Completion triggering
         if not self._completer:
@@ -311,6 +329,7 @@ class MainWindow(QWidget):
         self.hex_sent_count = 0            # Track progress for Hex Viewer line-by-line sending
         self.last_loaded_files = []        # To track file list changes for auto-saving
         self._connection_init_pending = False # Track if we are waiting for the welcome message
+        self.completion_enabled = True
 
         # Timer to debounce word list updates for better performance
         self.definition_timer = QTimer()
@@ -610,7 +629,7 @@ class MainWindow(QWidget):
         # 3. Right Section: Existing Editor Window
         editor_layout = QVBoxLayout()  # Define the editor_layout here
 
-        self.editor_label = QLabel("File Editor: (ctrl+ / F Q D)")
+        self.editor_label = QLabel("File Editor: (ctrl+ / F Q D I)")
         self.editor_label.setFont(QFont("Arial", 10, QFont.Bold))
         editor_layout.addWidget(self.editor_label)
         self.editor_fullpath = ""
@@ -639,6 +658,10 @@ class MainWindow(QWidget):
         self.comment_shortcut = QShortcut(QKeySequence("Ctrl+/"), self.editor_text_edit)
         self.comment_shortcut.setContext(Qt.WidgetShortcut)
         self.comment_shortcut.activated.connect(self.on_toggle_comment)
+
+        self.toggle_completion_shortcut = QShortcut(QKeySequence("Ctrl+I"), self.editor_text_edit)
+        self.toggle_completion_shortcut.setContext(Qt.WidgetShortcut)
+        self.toggle_completion_shortcut.activated.connect(self.on_toggle_completion)
 
         self.find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self.editor_text_edit)
         self.find_shortcut.setContext(Qt.WidgetShortcut)
@@ -1785,6 +1808,14 @@ class MainWindow(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save scratchpad: {e}")
+
+    def on_toggle_completion(self):
+        """Toggle automatic word completion on and off."""
+        self.completion_enabled = not self.completion_enabled
+        self.editor_text_edit.setCompletionEnabled(self.completion_enabled)
+        self.scratchpad_text_edit.setCompletionEnabled(self.completion_enabled)
+        enabled_text = "enabled" if self.completion_enabled else "disabled"
+        self.monitor.appendPlainText(f"Word completion {enabled_text}.")
 
     def on_toggle_comment(self):
         """Toggle Forth-style comments (\\ ) on the selected line(s) in the editor."""
