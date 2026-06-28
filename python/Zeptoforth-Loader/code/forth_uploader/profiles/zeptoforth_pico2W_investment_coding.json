@@ -7,11 +7,12 @@
     "pacing": 10,
     "ignore_chars": 0,
     "files": [
-        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280\\scratchpad.zf"
+        "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280\\scratchpad.zf",
+        "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Programming_files/zeptoforth/Investment-Code/documents/Zeptoforth-Encoding-Program.md"
     ],
     "snippets": [],
     "editor_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C_BME280.zf",
-    "reference_file": "C:/Users/rober/OneDrive/AA-Roberts-Hobbies/Languages/Forth/Zeptoforth-Projects/I2C-OLED-BME280/I2C-BME280-CHAT.zf",
+    "reference_file": "C:/Users/rober/OneDrive/Python_MyFilingSystem/AAA_Projects/Programming_files/zeptoforth/Investment-Code/documents/Zeptoforth-Encoding-Program.md",
     "groups": {
         "core": [
             "core.fs",

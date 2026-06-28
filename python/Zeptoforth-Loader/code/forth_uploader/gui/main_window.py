@@ -75,11 +75,13 @@ class FileListWidget(QListWidget):
         elif action == clear_action:
             self.clear()
 
-class ReferenceTextEdit(QPlainTextEdit):
-    """Custom QPlainTextEdit that supports dropping a file to load its content."""
+class ReferenceTextEdit(QTextEdit):
+    """Custom QTextEdit for editable markdown-style reference content with drag-and-drop loading."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.setAcceptRichText(False)
+        self.setPlaceholderText("Write markdown-style notes here...")
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -562,7 +564,7 @@ class MainWindow(QWidget):
         self.reference_text_edit.setFont(QFont("Consolas", 10))
         self.reference_text_edit.setTabStopDistance(3 * self.reference_text_edit.fontMetrics().width(' '))
         self.reference_text_edit.setStyleSheet("""
-            QPlainTextEdit {
+            QTextEdit {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F0FFF0, stop:1 #b0FF80);
                 border: 1px solid #000000;
                 padding: 5px;
@@ -573,7 +575,21 @@ class MainWindow(QWidget):
         self.ref_find_shortcut.setContext(Qt.WidgetShortcut)
         self.ref_find_shortcut.activated.connect(self.on_toggle_ref_find_highlight)
 
+        self.ref_save_shortcut = QShortcut(QKeySequence("Ctrl+S"), self.reference_text_edit)
+        self.ref_save_shortcut.setContext(Qt.WidgetShortcut)
+        self.ref_save_shortcut.activated.connect(self.on_save_reference_file)
+
+        reference_controls_layout = QHBoxLayout()
+        self.reference_open_btn = QPushButton("Open")
+        self.reference_open_btn.clicked.connect(self.open_Reference_File)
+        self.reference_save_btn = QPushButton("Save")
+        self.reference_save_btn.clicked.connect(self.on_save_reference_file)
+        reference_controls_layout.addWidget(self.reference_open_btn)
+        reference_controls_layout.addWidget(self.reference_save_btn)
+        reference_controls_layout.addStretch()
+
         reference_tab_layout = QVBoxLayout()
+        reference_tab_layout.addLayout(reference_controls_layout)
         reference_tab_layout.addWidget(self.reference_text_edit)
 
         reference_tab_widget = QWidget()
@@ -713,10 +729,13 @@ class MainWindow(QWidget):
         scratch2_layout = QVBoxLayout()
         scratch2_layout.addWidget(self.scratchpad_2_text_edit)
         scratch2_btns = QHBoxLayout()
+        self.saveas_scratch2_btn = QPushButton("Save Scratchpad As...")
+        self.saveas_scratch2_btn.clicked.connect(self.on_saveas_scratchpad_2)
         self.save_scratch2_btn = QPushButton("Save and Upload")
         self.save_scratch2_btn.clicked.connect(self.on_save_scratchpad_2)
         self.clear_scratch2_btn = QPushButton("Clear Scratchpad")
         self.clear_scratch2_btn.clicked.connect(self.scratchpad_2_text_edit.clear)
+        scratch2_btns.addWidget(self.saveas_scratch2_btn)
         scratch2_btns.addWidget(self.save_scratch2_btn)
         scratch2_btns.addWidget(self.clear_scratch2_btn)
         scratch2_layout.addLayout(scratch2_btns)
@@ -772,21 +791,37 @@ class MainWindow(QWidget):
         self.tab_widget_right.currentChanged.connect(self.on_tab_right_changed)
 
         # Set tab background colors via stylesheet for the right-hand tab widget
-        self.tab_widget_right.setStyleSheet("""
+        tabbar_style = """
+            QTabWidget::pane {
+                border: 1px solid #C0C0C0;
+                top: -1px;
+            }
             QTabBar::tab {
                 color: black;
                 padding: 6px 15px;
                 min-width: 100px;
-                background: #E0E0E0; /* Default (Middle): Scratchpad Light Gray */
                 border: 1px solid #C0C0C0;
+                border-bottom-color: #C0C0C0;
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
+                margin-right: -1px;
+                background: #E0E0E0;
             }
             QTabBar::tab:first { background: #FFE0FF; } /* Editor Pale Pink */
-            QTabBar::tab:nth-last-of-type(2) { background: #E0FFE0; }  /* Hex Viewer Pale Green */
+            QTabBar::tab:nth-child(2) { background: #E0E0E0; } /* Scratchpad Light Gray */
+            QTabBar::tab:nth-child(3) { background: #E0FFE0; } /* Hex Viewer Pale Green */
             QTabBar::tab:last { background: #000000; color: white; } /* RX Dump Black */
-            QTabBar::tab:selected { border-bottom: 2px solid #404040; font-weight: bold; }
-        """)
+            QTabBar::tab:selected {
+                border-bottom-color: #FFFFFF;
+                font-weight: bold;
+            }
+            QTabBar::tab:first:selected { background: #FFE0FF; }
+            QTabBar::tab:nth-child(2):selected { background: #E0E0E0; }
+            QTabBar::tab:nth-child(3):selected { background: #E0FFE0; }
+            QTabBar::tab:last:selected { background: #000000; color: white; }
+        """
+        self.tab_widget_right.setStyleSheet(tabbar_style)
+        self.tab_widget_right.tabBar().setStyleSheet(tabbar_style)
 
         self.profile_combo = QComboBox()
         self.profile_combo.setMinimumContentsLength(30)
@@ -1337,7 +1372,8 @@ class MainWindow(QWidget):
             path = item.data(Qt.UserRole)
             # Only upload Forth source files
             if path and path.lower().endswith((".zf", ".fs", ".f")) and not path.lower().startswith("http"):
-                self.serial.upload_file(path)
+                # Use upload_file_with_includes so #includezf directives are handled
+                self.upload_file_with_includes(path)
                 QApplication.processEvents()
 
         self.setCursor(Qt.ArrowCursor)
@@ -1346,6 +1382,102 @@ class MainWindow(QWidget):
         progress.close()
         self.tab_widget_left.setCurrentIndex(0)
         self.monitor.setFocus()
+
+    def get_include_library_folder(self):
+        if hasattr(self, "_include_library_folder") and self._include_library_folder is not None:
+            return self._include_library_folder
+
+        search_dir = os.path.abspath(os.path.dirname(__file__))
+        while True:
+            candidate = os.path.join(search_dir, "library")
+            if os.path.isdir(candidate):
+                self._include_library_folder = candidate
+                return candidate
+
+            parent_dir = os.path.dirname(search_dir)
+            if not parent_dir or parent_dir == search_dir:
+                break
+            search_dir = parent_dir
+
+        self._include_library_folder = None
+        return None
+
+    def sanitize_upload_line(self, line):
+        # Remove ANSI escape sequences and non-printable control characters before parsing.
+        line = re.sub(r'\x1B\[[0-?]*[ -/]*[@-~]', '', line)
+        line = re.sub(r'^[\x00-\x1F]+|[\x00-\x1F]+$', '', line)
+        return line.strip()
+
+    def parse_includezf_name(self, stripped_line):
+        original_line = stripped_line
+        line = self.sanitize_upload_line(stripped_line)
+        if "#includezf" in original_line.lower():
+            self.monitor.appendPlainText(
+                f"Include parse candidate raw={repr(original_line)} sanitized={repr(line)}"
+            )
+        line = re.split(r"[\\(]", line, maxsplit=1)[0].strip()
+        match = re.match(r"^#includezf\s+<?([A-Za-z0-9_.-]+)>?$", line, re.IGNORECASE)
+        if not match:
+            return None
+
+        include_name = match.group(1)
+        include_name = os.path.basename(include_name)
+        base_name, ext = os.path.splitext(include_name)
+        return base_name if ext.lower() == ".zf" else include_name
+
+    def resolve_includezf_file(self, include_name):
+        library_folder = self.get_include_library_folder()
+        if not library_folder:
+            return None
+        candidate = os.path.join(library_folder, f"{include_name}.zf")
+        return candidate if os.path.isfile(candidate) else None
+
+    def upload_file_with_includes(self, path, visited=None):
+        if visited is None:
+            visited = set()
+
+        abs_path = os.path.abspath(path)
+        if abs_path in visited:
+            self.monitor.appendPlainText(f"Warning: duplicate or recursive include skipped: {os.path.basename(abs_path)}")
+            return
+        visited.add(abs_path)
+
+        try:
+            with open(abs_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith("\\") or stripped.startswith("("):
+                        continue
+
+                    sanitized_line = self.sanitize_upload_line(line)
+                    stripped = sanitized_line.strip()
+                    if not stripped or stripped.startswith("\\") or stripped.startswith("("):
+                        continue
+
+                    include_name = self.parse_includezf_name(sanitized_line)
+                    if include_name:
+                        self.monitor.appendPlainText(f"Detected include directive: {include_name}")
+                        include_file = self.resolve_includezf_file(include_name)
+                        if include_file:
+                            self.monitor.appendPlainText(f"Resolved include to: {include_file}")
+                            self.monitor.appendPlainText(f"Including library file: {os.path.basename(include_file)}")
+                            self.upload_file_with_includes(include_file, visited)
+                        else:
+                            library_folder = self.get_include_library_folder()
+                            if library_folder:
+                                self.monitor.appendPlainText(f"Warning: includezf file not found: {include_name}.zf in {library_folder}")
+                            else:
+                                self.monitor.appendPlainText("Warning: library folder not found for #includezf")
+                        continue
+
+                    sanitized_line_lower = stripped.lower()
+                    if sanitized_line_lower.startswith("#includezf"):
+                        self.monitor.appendPlainText(f"Warning: #includezf line could not be parsed and was skipped: {repr(sanitized_line)}")
+                        continue
+
+                    self.serial.send_line(stripped)
+        except Exception as exc:
+            self.monitor.appendPlainText(f"Error uploading file '{os.path.basename(abs_path)}': {exc}")
 
     def on_monitor_upload_editor(self):
         """Sends 'ici' and then uploads the file currently loaded in the editor."""
@@ -1360,7 +1492,7 @@ class MainWindow(QWidget):
         self.setCursor(Qt.WaitCursor)
         try:
             self.serial.send_line("ici")
-            self.serial.upload_file(self.editor_fullpath)
+            self.upload_file_with_includes(self.editor_fullpath)
             self.monitor.appendPlainText(f"Sent 'ici' and uploaded editor file: {os.path.basename(self.editor_fullpath)}")
         finally:
             self.setCursor(Qt.ArrowCursor)
@@ -1389,7 +1521,8 @@ class MainWindow(QWidget):
             item = self.code_file_list.item(i)
             path = item.data(Qt.UserRole)
             if path and path.lower().endswith((".zf", ".fs", ".f")) and not path.lower().startswith("http"):
-                self.serial.upload_file(path)
+                # Use preprocessing-aware upload to handle includes
+                self.upload_file_with_includes(path)
                 QApplication.processEvents()
 
         self.setCursor(Qt.ArrowCursor)
@@ -1427,7 +1560,8 @@ class MainWindow(QWidget):
                 # If the clicked file is the scratchpad, upload it but don't load into editor
                 if os.path.basename(path).lower() == "scratchpad.zf":
                     if self.serial.ser and self.serial.ser.is_open:
-                        self.serial.upload_file(path)
+                        # Use include-aware upload for scratchpad too
+                        self.upload_file_with_includes(path)
                         self.monitor.appendPlainText(f"Uploaded: {path}")
                         self.tab_widget_left.setCurrentIndex(0)  # Switch to Monitor tab
                         self.monitor.setFocus()
@@ -1485,6 +1619,27 @@ class MainWindow(QWidget):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Could not save file: {e}")
 
+    def on_save_reference_file(self):
+        if self.reference_text_edit.document().isModified() or not self.reference_fullpath:
+            save_path = self.reference_fullpath or ""
+            if not save_path:
+                save_path, _ = QFileDialog.getSaveFileName(
+                    self,
+                    "Save Reference File",
+                    self.current_folder,
+                    "All Files (*)"
+                )
+            if not save_path:
+                return
+            try:
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write(self.reference_text_edit.toPlainText())
+                self.reference_fullpath = save_path
+                self.reference_text_edit.document().setModified(False)
+                self.monitor.appendPlainText(f"Saved reference file: {save_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Could not save reference file: {e}")
+
     def open_Reference_File(self):
         path, _ = QFileDialog.getOpenFileName(
             self,
@@ -1499,6 +1654,7 @@ class MainWindow(QWidget):
             with open(path, "r", encoding="utf-8") as f:
                 self.reference_text_edit.setPlainText(f.read())
             self.reference_fullpath = path
+            self.reference_text_edit.document().setModified(False)
         except Exception as e:
             print("Error loading reference file:", e)
 
@@ -1859,23 +2015,23 @@ class MainWindow(QWidget):
             self.scratchpad_2_text_edit.setFocus()
 
     def on_save_scratchpad_2(self):
-        """Saves current scratchpad content as scratchpad.zf and uploads it if connected."""
+        """Saves current scratchpad content as scratchpad.zf and uploads it if connected.
+        saves the scratchpad to the same folder as the file in editor
+        """
         content = self.scratchpad_2_text_edit.toPlainText()
-        # Determine the directory: use the editor's file path folder or fallback to current workspace
         folder = os.path.dirname(self.editor_fullpath) if self.editor_fullpath else self.current_folder
-        if not folder: folder = os.getcwd()
+        if not folder:
+            folder = os.getcwd()
 
         save_path = os.path.join(folder, "scratchpad.zf")
         try:
-            with open(save_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            self._save_scratchpad_content(save_path, content)
             self.monitor.appendPlainText(f"Black Scratchpad saved to: {save_path}")
 
-            # Automatically upload after saving if the serial port is open
             if self.serial.ser and self.serial.ser.is_open:
-                self.serial.upload_file(save_path)
+                # Use include-aware upload for saved scratchpad
+                self.upload_file_with_includes(save_path)
                 self.monitor.appendPlainText(f"Uploaded: {save_path}")
-                # Switch to Monitor tab and focus
                 self.tab_widget_left.setCurrentIndex(0)
                 self.monitor.setFocus()
             else:
@@ -1883,6 +2039,33 @@ class MainWindow(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Could not save scratchpad: {e}")
+
+    def on_saveas_scratchpad_2(self):
+        """Save current scratchpad content to a user-chosen file path."""
+        content = self.scratchpad_2_text_edit.toPlainText()
+        initial_dir = os.path.dirname(self.editor_fullpath) if self.editor_fullpath else self.current_folder
+        if not initial_dir:
+            initial_dir = os.getcwd()
+
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Scratchpad As",
+            os.path.join(initial_dir, "scratchpad.zf"),
+            "Forth files (*.zf *.fs *.f);;All files (*.*)"
+        )
+
+        if not save_path:
+            return
+
+        try:
+            self._save_scratchpad_content(save_path, content)
+            self.monitor.appendPlainText(f"Scratchpad saved to: {save_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Could not save scratchpad: {e}")
+
+    def _save_scratchpad_content(self, save_path, content):
+        with open(save_path, "w", encoding="utf-8") as f:
+            f.write(content)
 
     def on_toggle_completion(self):
         """Toggle automatic word completion on and off."""
